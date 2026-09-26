@@ -67,6 +67,7 @@ def render_voucher_svg(
     text_overrides: dict[str, str] | None = None,
     bg_asset_override: str | None = None,
     logo_asset_override: str | None = None,
+    bg_color_override: str | None = None,
 ) -> str:
     """Renders a standalone, proportional SVG XML representation of a voucher for UI preview."""
     w_mm = template.width_mm
@@ -76,8 +77,14 @@ def render_voucher_svg(
 
     # 1. Background layer
     bg = template.background
-    eff_bg_type = "image" if bg_asset_override else bg.type
-    eff_bg_asset = bg_asset_override or bg.image_asset
+    eff_color_start = bg_color_override or bg.color_start
+
+    if bg_asset_override == "__NONE__":
+        eff_bg_type = "flat_color"
+        eff_bg_asset = None
+    else:
+        eff_bg_type = "image" if bg_asset_override else bg.type
+        eff_bg_asset = bg_asset_override or bg.image_asset
 
     if eff_bg_type == "gradient" and bg.color_end:
         angle_rad = math.radians(bg.gradient_angle_deg)
@@ -89,7 +96,7 @@ def render_voucher_svg(
         grad_id = f"bg-grad-{template.id}"
         defs_elements.append(
             f'  <linearGradient id="{grad_id}" x1="{x1}%" y1="{y1}%" x2="{x2}%" y2="{y2}%">\n'
-            f'    <stop offset="0%" stop-color="{html.escape(bg.color_start)}" />\n'
+            f'    <stop offset="0%" stop-color="{html.escape(eff_color_start)}" />\n'
             f'    <stop offset="100%" stop-color="{html.escape(bg.color_end)}" />\n'
             f"  </linearGradient>"
         )
@@ -99,30 +106,31 @@ def render_voucher_svg(
     elif eff_bg_type == "image":
         # Base color behind transparent images
         svg_elements.append(
-            f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
+            f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(eff_color_start)}" />'
         )
         if eff_bg_asset and assets_dir:
-            img_path = assets_dir / eff_bg_asset
+            img_path = (assets_dir / eff_bg_asset).resolve()
             uri = _encode_image_to_base64_uri(img_path)
             if uri:
                 svg_elements.append(
-                    f'<image href="{uri}" width="{w_mm}" height="{h_mm}" preserveAspectRatio="xMidYMid slice" />'
+                    f'<image href="{uri}" xlink:href="{uri}" width="{w_mm}" height="{h_mm}" preserveAspectRatio="xMidYMid slice" />'
                 )
     else:
         svg_elements.append(
-            f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
+            f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(eff_color_start)}" />'
         )
 
     # 2. Logo layer
-    if template.logo and assets_dir:
+    if template.logo and assets_dir and logo_asset_override != "__NONE__":
         eff_logo_asset = logo_asset_override or template.logo.asset_filename
-        l_path = assets_dir / eff_logo_asset
-        uri = _encode_image_to_base64_uri(l_path)
-        if uri:
-            svg_elements.append(
-                f'<image href="{uri}" x="{template.logo.x_mm}" y="{template.logo.y_mm}" '
-                f'width="{template.logo.width_mm}" height="{template.logo.height_mm}" preserveAspectRatio="xMidYMid meet" />'
-            )
+        if eff_logo_asset:
+            l_path = (assets_dir / eff_logo_asset).resolve()
+            uri = _encode_image_to_base64_uri(l_path)
+            if uri:
+                svg_elements.append(
+                    f'<image href="{uri}" xlink:href="{uri}" x="{template.logo.x_mm}" y="{template.logo.y_mm}" '
+                    f'width="{template.logo.width_mm}" height="{template.logo.height_mm}" preserveAspectRatio="xMidYMid meet" />'
+                )
 
     # 3. Text blocks layer with clean vector stroke
     overrides = text_overrides or {}
@@ -185,7 +193,7 @@ def render_voucher_svg(
     body = "\n  ".join(svg_elements)
 
     return (
-        f'<svg xmlns="http://www.w3.org/2000/svg" version="1.1" '
+        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" '
         f'viewBox="0 0 {w_mm} {h_mm}" style="width: 100%; height: auto; max-height: 480px; display: block;">\n'
         f"{defs_block}"
         f"  {body}\n"
@@ -229,14 +237,21 @@ def _render_voucher_on_pdf(
 
     bg_override = voucher.bg_asset_override if voucher else None
     logo_override = voucher.logo_asset_override if voucher else None
+    bg_color_override = getattr(voucher, "bg_color_override", None) if voucher else None
 
-    eff_bg_type = "image" if bg_override else template.background.type
-    eff_bg_asset = bg_override or template.background.image_asset
+    eff_color_start = bg_color_override or template.background.color_start
+
+    if bg_override == "__NONE__":
+        eff_bg_type = "flat_color"
+        eff_bg_asset = None
+    else:
+        eff_bg_type = "image" if bg_override else template.background.type
+        eff_bg_asset = bg_override or template.background.image_asset
 
     # 1. Background
     bg = template.background
     if eff_bg_type == "gradient" and bg.color_end:
-        r1, g1, b1 = _hex_to_rgb(bg.color_start)
+        r1, g1, b1 = _hex_to_rgb(eff_color_start)
         r2, g2, b2 = _hex_to_rgb(bg.color_end)
         steps = 40
         step_w = t_w_pt / steps
@@ -250,7 +265,7 @@ def _render_voucher_on_pdf(
             c.rect(step_idx * step_w, 0, step_w + 0.5, t_h_pt, fill=1, stroke=0)
     elif eff_bg_type == "image":
         # Base color behind transparent images
-        r, g, b = _hex_to_rgb(bg.color_start)
+        r, g, b = _hex_to_rgb(eff_color_start)
         c.setFillColorRGB(r, g, b)
         c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
 
@@ -262,12 +277,12 @@ def _render_voucher_on_pdf(
                 c.drawImage(str(img_path), 0, -t_h_pt, width=t_w_pt, height=t_h_pt, mask="auto")
                 c.restoreState()
     else:
-        r, g, b = _hex_to_rgb(bg.color_start)
+        r, g, b = _hex_to_rgb(eff_color_start)
         c.setFillColorRGB(r, g, b)
         c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
 
     # 2. Logo
-    if template.logo:
+    if template.logo and logo_override != "__NONE__":
         eff_logo_asset = logo_override or template.logo.asset_filename
         l_path = assets_dir / eff_logo_asset
         if l_path.is_file():

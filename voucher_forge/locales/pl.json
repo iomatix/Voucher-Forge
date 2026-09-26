@@ -59,5 +59,11 @@
   "pos_x_mm": "Pozycja X (mm)",
   "pos_y_mm": "Pozycja Y (mm)",
   "box_width_mm": "Szerokość Kodu (mm)",
-  "box_height_mm": "Wysokość Kodu (mm)"
+  "box_height_mm": "Wysokość Kodu (mm)",
+  "asset_default": "Domyślne z szablonu",
+  "asset_none": "(Brak / Puste)",
+  "variant_bg_asset": "Grafika Tła",
+  "variant_logo_asset": "Logo / Sticker",
+  "variant_bg_color": "Kolor Bazowy",
+  "variant_color_default": "Domyślny"
 }

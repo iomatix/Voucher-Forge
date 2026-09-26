@@ -59,5 +59,11 @@
   "pos_x_mm": "Position X (mm)",
   "pos_y_mm": "Position Y (mm)",
   "box_width_mm": "Box Width (mm)",
-  "box_height_mm": "Box Height (mm)"
+  "box_height_mm": "Box Height (mm)",
+  "asset_default": "Template Default",
+  "asset_none": "(None / Transparent)",
+  "variant_bg_asset": "Background Image",
+  "variant_logo_asset": "Logo / Sticker",
+  "variant_bg_color": "Base Color",
+  "variant_color_default": "Default"
 }

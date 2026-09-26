@@ -44,7 +44,7 @@ class TemplateStudioView:
                     options=template_options,
                     value=self.state.active_template.id,
                     label=self.state.t("select_template"),
-                    on_change=lambda e: self._on_template_selected(e.value),
+                    on_change=lambda e: self._on_template_selected(str(e.value)),
                 ).classes("w-full mb-2")
 
                 self.name_input = ui.input(
@@ -357,15 +357,16 @@ class TemplateStudioView:
         tmpl = self.state.active_template
         if enabled:
             available = self._get_available_assets()
-            first_asset = available[0] if available else ""
+            selected_asset = self.logo_asset_select.value or (available[0] if available else "")
             tmpl.logo = LogoConfig(
-                asset_filename=first_asset,
+                asset_filename=selected_asset,
                 x_mm=10.0,
                 y_mm=10.0,
                 width_mm=24.0,
                 height_mm=24.0,
             )
-            self.logo_asset_select.value = first_asset
+            self.logo_asset_select.value = selected_asset
+            self.logo_asset_select.update()
             text_x = 10.0 + 24.0 + 6.0
             for tb in tmpl.text_blocks:
                 tb.x_mm = text_x
@@ -379,9 +380,21 @@ class TemplateStudioView:
 
     def _update_logo_asset(self, asset_name: str | None) -> None:
         tmpl = self.state.active_template
-        if tmpl.logo and asset_name:
-            tmpl.logo.asset_filename = asset_name
-            self._refresh_preview()
+        val = str(asset_name or "")
+        if tmpl.logo:
+            tmpl.logo.asset_filename = val
+        elif val:
+            tmpl.logo = LogoConfig(
+                asset_filename=val,
+                x_mm=10.0,
+                y_mm=10.0,
+                width_mm=24.0,
+                height_mm=24.0,
+            )
+            self.logo_checkbox.value = True
+            self.logo_checkbox.update()
+            self.logo_container.set_visibility(True)
+        self._refresh_preview()
 
     def _update_active_and_refresh(self, field_name: str, value: Any) -> None:
         tmpl = self.state.active_template
@@ -478,16 +491,25 @@ class TemplateStudioView:
 
         available_assets = self._get_available_assets()
         options = [""] + available_assets
+
+        # Kemas kini medan aset latar belakang
         self.asset_select.options = options
         self.asset_select.value = tmpl.background.image_asset or ""
+        self.asset_select.update()
 
         self.grad_container.set_visibility(tmpl.background.type == "gradient")
         self.asset_select.set_visibility(tmpl.background.type == "image")
 
-        has_logo = tmpl.logo is not None
+        # Kemas kini medan logo
+        has_logo = tmpl.logo is not None and bool(tmpl.logo.asset_filename)
+        actual_logo = tmpl.logo.asset_filename if has_logo else ""
+
         self.logo_checkbox.value = has_logo
+        self.logo_checkbox.update()
+
         self.logo_asset_select.options = options
-        self.logo_asset_select.value = tmpl.logo.asset_filename if tmpl.logo else ""
+        self.logo_asset_select.value = actual_logo
+        self.logo_asset_select.update()
         self.logo_container.set_visibility(has_logo)
 
         tb_h = tmpl.text_blocks[0] if len(tmpl.text_blocks) > 0 else None
@@ -499,7 +521,6 @@ class TemplateStudioView:
         self.sub_color_input.value = tb_s.color_hex if tb_s else "#A1A1AA"
 
         self._refresh_preview()
-
     def _save_current_template(self) -> None:
         self.state.storage.save_template(self.state.active_template)
         self._refresh_template_dropdown()

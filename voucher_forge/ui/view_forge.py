@@ -22,6 +22,7 @@ class VariantRow:
     count: int
     bg_asset: str | None = None
     logo_asset: str | None = None
+    bg_color: str | None = None
 
 
 class BatchForgeView:
@@ -112,7 +113,7 @@ class BatchForgeView:
             ).classes("w-full bg-emerald-600 text-white py-3 font-semibold mt-4")
 
         self.state.register_lang_listener(self._update_labels)
-
+    
     def _render_variant_svg(self, row: VariantRow) -> str:
         tmpl = self.state.storage.load_template(self.template_select.value)
         overrides = {}
@@ -121,19 +122,31 @@ class BatchForgeView:
         if len(tmpl.text_blocks) > 1:
             overrides[tmpl.text_blocks[1].id] = row.sub_text
 
+        # Obsługa jawnego zdjęcia grafiki (__NONE__) lub pozostawienia domyślnej
+        bg_override = "__NONE__" if row.bg_asset == "none" else (row.bg_asset or None)
+        logo_override = "__NONE__" if row.logo_asset == "none" else (row.logo_asset or None)
+
         return render_voucher_svg(
             template=tmpl,
             sample_code="KPN-25W-12-8K",
             assets_dir=self.state.storage.assets_dir,
             text_overrides=overrides,
-            bg_asset_override=row.bg_asset,
-            logo_asset_override=row.logo_asset,
+            bg_asset_override=bg_override,
+            logo_asset_override=logo_override,
+            bg_color_override=row.bg_color,
         )
+
 
     def _render_variants_table(self) -> None:
         self.variants_container.clear()
         self.preview_containers.clear()
-        assets = [""] + self._get_available_assets()
+        raw_assets = self._get_available_assets()
+        asset_options = {
+            "": self.state.t("asset_default"),
+            "none": self.state.t("asset_none"),
+        }
+        for item in raw_assets:
+            asset_options[item] = item
 
         with self.variants_container:
             for idx, row in enumerate(self.variants):
@@ -185,25 +198,40 @@ class BatchForgeView:
                             ),
                         ).classes("w-full text-sm")
 
-                        # Per-variant asset selectors
-                        with ui.row().classes("w-full gap-2 mt-1"):
+                        # Per-variant asset & color selectors
+                        with ui.row().classes("w-full gap-2 mt-1 items-center"):
                             ui.select(
-                                options=assets,
+                                options=asset_options,
                                 value=row.bg_asset or "",
-                                label="Grafika Tła",
+                                label=self.state.t("variant_bg_asset"),
                                 on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                    r, i, "bg_asset", e.value or None
+                                    r, i, "bg_asset", e.value
                                 ),
                             ).classes("flex-1 text-xs")
 
                             ui.select(
-                                options=assets,
+                                options=asset_options,
                                 value=row.logo_asset or "",
-                                label="Logo / Sticker",
+                                label=self.state.t("variant_logo_asset"),
                                 on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                    r, i, "logo_asset", e.value or None
+                                    r, i, "logo_asset", e.value
                                 ),
                             ).classes("flex-1 text-xs")
+
+                            with ui.row().classes("items-center gap-1 w-36"):
+                                ui.input(
+                                    label=self.state.t("variant_bg_color"),
+                                    value=row.bg_color or "",
+                                    placeholder=self.state.t("variant_color_default"),
+                                    on_change=lambda e, r=row, i=idx: self._update_row_field(
+                                        r, i, "bg_color", e.value or None
+                                    ),
+                                ).classes("flex-1 text-xs")
+                                ui.color_picker(
+                                    on_pick=lambda e, r=row, i=idx: self._update_row_field(
+                                        r, i, "bg_color", e.color
+                                    )
+                                )
 
     def _update_row_field(
         self, row: VariantRow, index: int, field_name: str, value: Any
@@ -273,7 +301,7 @@ class BatchForgeView:
     async def _handle_generation(self) -> None:
         try:
             variant_tuples = [
-                (r.title.strip(), r.sub_text.strip(), r.count, r.bg_asset, r.logo_asset)
+                (r.title.strip(), r.sub_text.strip(), r.count, r.bg_asset, r.logo_asset, r.bg_color)
                 for r in self.variants
                 if r.title.strip()
             ]
