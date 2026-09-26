@@ -1,7 +1,7 @@
 [project]
 name = "voucher-forge"
 version = "0.1.0"
-description = ""
+description = "Deterministic voucher generator and print packing engine"
 authors = [{ name = "iomatix" }]
 requires-python = ">=3.11"
 dependencies = [

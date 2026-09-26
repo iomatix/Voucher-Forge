@@ -51,3 +51,7 @@ data/templates/*.json
 !data/exports/.gitkeep
 !data/bundles/.gitkeep
 !data/templates/.gitkeep
+data/presets/*
+!data/presets/.gitkeep
+data/exports/*
+!data/exports/.gitkeep

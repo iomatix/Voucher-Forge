@@ -13,7 +13,7 @@ from nicegui import run, ui
 from voucher_forge.code_engine import CodeEngine
 from voucher_forge.models import CampaignPreset, VariantPreset
 from voucher_forge.packer import pack_vouchers
-from voucher_forge.renderer import render_bundle_pdf, render_voucher_svg
+from voucher_forge.renderer import render_bundle_html, render_voucher_svg
 from voucher_forge.ui.state import AppState
 
 
@@ -31,6 +31,7 @@ class BatchForgeView:
     def __init__(self, state: AppState) -> None:
         self.state = state
         self.preview_containers: dict[int, ui.html] = {}
+        self.print_scale_val: float = 1.0
         self.variants: list[VariantRow] = [
             VariantRow("DINNER FOR TWO", "Includes starter, main course, and dessert", 3),
             VariantRow("RELAX MASSAGE", "60-minute full body hot stone session", 2),
@@ -120,6 +121,31 @@ class BatchForgeView:
                     step=1,
                 ).classes("flex-1")
 
+            # --- Layout & Print Scale Controls ---
+            with ui.row().classes(
+                "w-full items-center justify-between p-3 mt-2 bg-slate-50 border border-slate-200 rounded"
+            ):
+                with ui.column().classes("gap-0"):
+                    self.scale_label = ui.label(
+                        f"{self.state.t('print_scale')}: {int(self.print_scale_val * 100)}%"
+                    ).classes("text-xs font-semibold text-slate-700")
+
+                    self.scale_desc = ui.label(
+                        self.state.t("print_scale_desc")
+                    ).classes("text-[11px] text-slate-500")
+
+                with ui.row().classes("items-center gap-3"):
+                    self.scale_slider = ui.slider(
+                        min=0.3,
+                        max=1.0,
+                        step=0.05,
+                        value=self.print_scale_val,
+                        on_change=self._on_scale_change,
+                    ).classes("w-48")
+                    self.scale_pct_badge = ui.badge(
+                        f"{int(self.print_scale_val * 100)}%", color="slate-700"
+                    ).classes("text-xs font-mono")
+
             ui.separator().classes("my-3")
 
             # Variants Matrix
@@ -146,19 +172,26 @@ class BatchForgeView:
 
         self.state.register_lang_listener(self._update_labels)
 
+    def _on_scale_change(self, e: Any) -> None:
+        self.print_scale_val = round(float(e.value or 1.0), 2)
+        pct_text = f"{int(self.print_scale_val * 100)}%"
+        self.scale_label.text = f"{self.state.t('print_scale')}: {pct_text}"
+        self.scale_pct_badge.text = pct_text
+        self._update_summary()
+
     def _render_variant_svg(self, row: VariantRow) -> str:
-        tmpl = self.state.storage.load_template(self.template_select.value)
+        template = self.state.storage.load_template(self.template_select.value)
         overrides = {}
-        if len(tmpl.text_blocks) > 0:
-            overrides[tmpl.text_blocks[0].id] = row.title
-        if len(tmpl.text_blocks) > 1:
-            overrides[tmpl.text_blocks[1].id] = row.sub_text
+        if len(template.text_blocks) > 0:
+            overrides[template.text_blocks[0].id] = row.title
+        if len(template.text_blocks) > 1:
+            overrides[template.text_blocks[1].id] = row.sub_text
 
         bg_override = "__NONE__" if row.bg_asset == "none" else (row.bg_asset or None)
         logo_override = "__NONE__" if row.logo_asset == "none" else (row.logo_asset or None)
 
         return render_voucher_svg(
-            template=tmpl,
+            template=template,
             sample_code="KPN-25W-12-8K",
             assets_dir=self.state.storage.assets_dir,
             text_overrides=overrides,
@@ -374,9 +407,13 @@ class BatchForgeView:
 
     def _update_summary(self) -> None:
         total = sum(r.count for r in self.variants)
-        tmpl = self.state.storage.load_template(self.template_select.value)
+        template = self.state.storage.load_template(self.template_select.value)
 
-        v_area = max(100.0, tmpl.width_mm * tmpl.height_mm)
+        scale = getattr(self, "print_scale_val", 1.0)
+        scaled_w = template.width_mm * scale
+        scaled_h = template.height_mm * scale
+        v_area = max(50.0, scaled_w * scaled_h)
+
         capacity_per_sheet = max(1, math.floor(52000.0 / v_area))
         sheets = max(1, math.ceil(total / capacity_per_sheet))
 
@@ -407,6 +444,12 @@ class BatchForgeView:
         self.b_name.props(f'label="{self.state.t("bundle_name")}"')
         self.b_prefix.props(f'label="{self.state.t("code_prefix")}"')
         self.b_validity.props(f'label="{self.state.t("validity_months")}"')
+
+        pct_text = f"{int(self.print_scale_val * 100)}%"
+        self.scale_label.text = f"{self.state.t('print_scale')}: {pct_text}"
+        self.scale_desc.text = self.state.t("print_scale_desc")
+        self.scale_pct_badge.text = pct_text
+
         self.add_btn.text = self.state.t("add_variant")
         self.export_btn.text = self.state.t("generate_and_export")
         self._update_summary()
@@ -414,6 +457,10 @@ class BatchForgeView:
 
     async def _handle_generation(self) -> None:
         try:
+            template = self.state.storage.load_template(self.template_select.value)
+            t_id1 = template.text_blocks[0].id if len(template.text_blocks) > 0 else "tb1"
+            t_id2 = template.text_blocks[1].id if len(template.text_blocks) > 1 else "tb2"
+
             variant_tuples = [
                 (
                     r.title.strip(),
@@ -422,6 +469,8 @@ class BatchForgeView:
                     r.bg_asset,
                     r.logo_asset,
                     r.bg_color,
+                    t_id1,
+                    t_id2,
                 )
                 for r in self.variants
                 if r.title.strip()
@@ -436,23 +485,27 @@ class BatchForgeView:
             )
             self.state.storage.save_bundle(bundle)
 
-            template = self.state.storage.load_template(self.template_select.value)
             items_to_pack = [
                 (v.code, template.width_mm, template.height_mm)
                 for v in bundle.vouchers
             ]
-            packing_result = pack_vouchers(items_to_pack, margin_mm=8.0, spacing_mm=4.0)
+            packing_result = pack_vouchers(
+                items=items_to_pack,
+                margin_mm=8.0,
+                spacing_mm=4.0,
+                scale_factor=self.print_scale_val,
+            )
 
-            output_pdf = self.state.storage.exports_dir / f"{bundle.id}.pdf"
+            output_html = self.state.storage.exports_dir / f"{bundle.id}.html"
             templates_map = {template.id: template}
             vouchers_map = {v.code: v for v in bundle.vouchers}
 
             await run.cpu_bound(
-                render_bundle_pdf,
+                render_bundle_html,
                 packing_result=packing_result,
                 templates_map=templates_map,
                 vouchers_map=vouchers_map,
-                output_pdf_path=output_pdf,
+                output_html_path=output_html,
                 assets_dir=self.state.storage.assets_dir,
             )
 
@@ -460,7 +513,10 @@ class BatchForgeView:
                 self.state.t("bundle_success").format(count=len(bundle.vouchers)),
                 type="positive",
             )
-            ui.download(f"/exports/{output_pdf.name}")
+
+            export_url = f"/exports/{output_html.name}"
+            ui.download(export_url)
+            ui.navigate.to(export_url, new_tab=True)
 
         except (ValueError, OSError, RuntimeError) as exc:
             ui.notify(f"Generation Error: {exc}", type="negative")

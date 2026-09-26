@@ -1,7 +1,9 @@
-"""Rendering engine for vector SVG previews and multi-page print-ready PDFs.
+"""Rendering engine for vector SVG previews and multi-page print sheets.
 
-Transforms TemplateConfig, VoucherItem, and PackingResult into SVG strings and ReportLab PDFs.
-Zero-UI coupling: depends strictly on standard library and reportlab.
+Maintains strict separation between responsive UI preview vectors (CSS-scaled SVG)
+and print-sheet layout logic with parametric scale, enterprise typography (Inter),
+and crisp vector clipping masks.
+Zero-UI coupling: standard library only.
 """
 
 from __future__ import annotations
@@ -13,22 +15,15 @@ import mimetypes
 import uuid
 from pathlib import Path
 
-from reportlab.graphics.barcode.code128 import Code128
-from reportlab.lib.colors import HexColor, gray
-from reportlab.lib.units import mm as MM_TO_PT
-from reportlab.pdfgen import canvas
-
 from voucher_forge.models import TemplateConfig, VoucherItem
 from voucher_forge.packer import (
     A4_HEIGHT_MM,
     A4_WIDTH_MM,
-    CutMark,
-    PackedItem,
+    PackedPage,
     PackingResult,
 )
 
-A4_PAGE_WIDTH_PT = A4_WIDTH_MM * MM_TO_PT
-A4_PAGE_HEIGHT_PT = A4_HEIGHT_MM * MM_TO_PT
+FONT_STACK: str = "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif"
 
 
 def _hex_to_rgb(hex_code: str) -> tuple[float, float, float]:
@@ -70,11 +65,19 @@ def render_voucher_svg(
     logo_asset_override: str | None = None,
     bg_color_override: str | None = None,
 ) -> str:
-    """Renders a standalone, proportional SVG XML representation of a voucher for UI preview."""
+    """Renders a standalone, responsive SVG XML representation of a voucher for UI preview."""
     w_mm = template.width_mm
     h_mm = template.height_mm
     svg_elements: list[str] = []
     defs_elements: list[str] = []
+
+    render_uid = uuid.uuid4().hex[:8]
+    clip_id = f"voucher-clip-{template.id}-{render_uid}"
+    defs_elements.append(
+        f'  <clipPath id="{clip_id}">\n'
+        f'    <rect width="{w_mm}" height="{h_mm}" rx="0" ry="0" />\n'
+        f"  </clipPath>"
+    )
 
     # 1. Background layer
     bg = template.background
@@ -94,8 +97,6 @@ def render_voucher_svg(
         x2 = round(50 + 50 * math.cos(angle_rad), 2)
         y2 = round(50 + 50 * math.sin(angle_rad), 2)
 
-        # Unikalny identyfikator gradientu zapobiega konfliktom w drzewie DOM przeglądarki
-        render_uid = uuid.uuid4().hex[:8]
         grad_id = f"bg-grad-{template.id}-{render_uid}"
         defs_elements.append(
             f'  <linearGradient id="{grad_id}" x1="{x1}%" y1="{y1}%" x2="{x2}%" y2="{y2}%">\n'
@@ -107,7 +108,6 @@ def render_voucher_svg(
             f'<rect width="{w_mm}" height="{h_mm}" fill="url(#{grad_id})" />'
         )
     elif eff_bg_type == "image":
-        # Base color behind transparent images
         svg_elements.append(
             f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(eff_color_start)}" />'
         )
@@ -135,20 +135,37 @@ def render_voucher_svg(
                     f'width="{template.logo.width_mm}" height="{template.logo.height_mm}" preserveAspectRatio="xMidYMid meet" />'
                 )
 
-    # 3. Text blocks layer with clean vector stroke
-    overrides = text_overrides or {}
-    for tb in template.text_blocks:
-        display_text = overrides.get(tb.id, tb.text)
+    # 3. Text blocks layer (Inter typography with automatic boundary safety)
+    raw_overrides = text_overrides or {}
+    override_vals = list(raw_overrides.values())
+
+    for idx, tb in enumerate(template.text_blocks):
+        if tb.id in raw_overrides:
+            display_text = raw_overrides[tb.id]
+        elif idx < len(override_vals):
+            display_text = override_vals[idx]
+        else:
+            display_text = tb.text
+
         font_size_units = round(tb.font_size_pt * 0.352778, 3)
         escaped_text = html.escape(display_text)
         stroke_color = _get_contrast_stroke(tb.color_hex)
         stroke_w = round(font_size_units * 0.12, 3)
 
+        max_text_w = max(10.0, round(w_mm - tb.x_mm - 4.0, 2))
+        est_char_w = font_size_units * 0.58
+        est_total_w = len(display_text) * est_char_w
+
+        length_constraint = ""
+        if est_total_w > max_text_w:
+            length_constraint = f'textLength="{max_text_w}" lengthAdjust="spacingAndGlyphs"'
+
         svg_elements.append(
-            f'<text x="{tb.x_mm}" y="{tb.y_mm}" font-family="{html.escape(tb.font_family)}, sans-serif" '
-            f'font-size="{font_size_units}" font-weight="bold" fill="{html.escape(tb.color_hex)}" '
+            f'<text x="{tb.x_mm}" y="{tb.y_mm}" {length_constraint} '
+            f'font-family="{FONT_STACK}" '
+            f'font-size="{font_size_units}" font-weight="700" fill="{html.escape(tb.color_hex)}" '
             f'stroke="{stroke_color}" stroke-width="{stroke_w}" stroke-linejoin="round" '
-            f'style="paint-order: stroke fill;" dominant-baseline="hanging">{escaped_text}</text>'
+            f'style="paint-order: stroke fill; letter-spacing: -0.01em;" dominant-baseline="hanging">{escaped_text}</text>'
         )
 
     # 4. Code Box layer
@@ -179,7 +196,7 @@ def render_voucher_svg(
         text_x = cb.x_mm + (cb.width_mm / 2.0)
         svg_elements.append(
             f'<text x="{text_x:.2f}" y="{text_y:.2f}" font-family="monospace" '
-            f'font-size="{font_size_units}" font-weight="bold" fill="#0F172A" '
+            f'font-size="{font_size_units}" font-weight="700" fill="#0F172A" '
             f'text-anchor="middle">{html.escape(sample_code)}</text>'
         )
     else:
@@ -188,201 +205,180 @@ def render_voucher_svg(
         text_x = cb.x_mm + (cb.width_mm / 2.0)
         svg_elements.append(
             f'<text x="{text_x:.2f}" y="{text_y:.2f}" font-family="monospace" '
-            f'font-size="{font_size_units}" font-weight="bold" fill="#0F172A" '
+            f'font-size="{font_size_units}" font-weight="700" fill="#0F172A" '
             f'text-anchor="middle">{html.escape(sample_code)}</text>'
         )
 
+    # 5. Technical clean border (hairline guideline for manual trimming)
+    svg_elements.append(
+        f'<rect width="{w_mm}" height="{h_mm}" fill="none" stroke="#CBD5E1" stroke-width="0.15" />'
+    )
+
     defs_block = "<defs>\n" + "\n".join(defs_elements) + "\n</defs>\n" if defs_elements else ""
-    body = "\n  ".join(svg_elements)
+    body = "\n    ".join(svg_elements)
 
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" '
         f'viewBox="0 0 {w_mm} {h_mm}" style="width: 100%; height: auto; max-height: 480px; display: block;">\n'
         f"{defs_block}"
-        f"  {body}\n"
+        f'  <g clip-path="url(#{clip_id})">\n'
+        f"    {body}\n"
+        f"  </g>\n"
         f"</svg>"
     )
 
 
-def _draw_cut_mark(c: canvas.Canvas, mark: CutMark) -> None:
-    c.setLineWidth(0.5)
-    c.setStrokeColor(gray)
-    x1_pt = mark.x1_mm * MM_TO_PT
-    y1_pt = A4_PAGE_HEIGHT_PT - (mark.y1_mm * MM_TO_PT)
-    x2_pt = mark.x2_mm * MM_TO_PT
-    y2_pt = A4_PAGE_HEIGHT_PT - (mark.y2_mm * MM_TO_PT)
-    c.line(x1_pt, y1_pt, x2_pt, y2_pt)
-
-
-def _render_voucher_on_pdf(
-    c: canvas.Canvas,
-    item: PackedItem,
-    template: TemplateConfig,
-    voucher: VoucherItem | None,
+def _render_page_svg(
+    page: PackedPage,
+    templates_map: dict[str, TemplateConfig],
+    vouchers_map: dict[str, VoucherItem],
     assets_dir: Path,
-) -> None:
-    c.saveState()
+) -> str:
+    """Composes a complete A4 sheet SVG embedding exact voucher vector outputs with parametric scaling."""
+    sheet_w = A4_WIDTH_MM
+    sheet_h = A4_HEIGHT_MM
 
-    x_pt = item.x_mm * MM_TO_PT
-    y_top_pt = A4_PAGE_HEIGHT_PT - (item.y_mm * MM_TO_PT)
-
-    c.translate(x_pt, y_top_pt)
-
-    if item.is_rotated:
-        c.rotate(-90)
-        c.translate(-template.width_mm * MM_TO_PT, 0)
-
-    # Invert local Y-axis so (0,0) is top-left
-    c.scale(1, -1)
-
-    t_w_pt = template.width_mm * MM_TO_PT
-    t_h_pt = template.height_mm * MM_TO_PT
-
-    bg_override = voucher.bg_asset_override if voucher else None
-    logo_override = voucher.logo_asset_override if voucher else None
-    bg_color_override = getattr(voucher, "bg_color_override", None) if voucher else None
-
-    eff_color_start = bg_color_override or template.background.color_start
-
-    if bg_override == "__NONE__":
-        eff_bg_type = "flat_color"
-        eff_bg_asset = None
-    else:
-        eff_bg_type = "image" if bg_override else template.background.type
-        eff_bg_asset = bg_override or template.background.image_asset
-
-    # 1. Background
-    bg = template.background
-    if eff_bg_type == "gradient" and bg.color_end:
-        r1, g1, b1 = _hex_to_rgb(eff_color_start)
-        r2, g2, b2 = _hex_to_rgb(bg.color_end)
-        steps = 40
-        step_w = t_w_pt / steps
-        for step_idx in range(steps):
-            ratio = step_idx / steps
-            r = r1 + (r2 - r1) * ratio
-            g = g1 + (g2 - g1) * ratio
-            b = b1 + (b2 - b1) * ratio
-            c.setFillColorRGB(r, g, b)
-            c.setStrokeColorRGB(r, g, b)
-            c.rect(step_idx * step_w, 0, step_w + 0.5, t_h_pt, fill=1, stroke=0)
-    elif eff_bg_type == "image":
-        # Base color behind transparent images
-        r, g, b = _hex_to_rgb(eff_color_start)
-        c.setFillColorRGB(r, g, b)
-        c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
-
-        if eff_bg_asset:
-            img_path = assets_dir / eff_bg_asset
-            if img_path.is_file():
-                c.saveState()
-                c.scale(1, -1)
-                c.drawImage(str(img_path), 0, -t_h_pt, width=t_w_pt, height=t_h_pt, mask="auto")
-                c.restoreState()
-    else:
-        r, g, b = _hex_to_rgb(eff_color_start)
-        c.setFillColorRGB(r, g, b)
-        c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
-
-    # 2. Logo
-    if template.logo and logo_override != "__NONE__":
-        eff_logo_asset = logo_override or template.logo.asset_filename
-        l_path = assets_dir / eff_logo_asset
-        if l_path.is_file():
-            c.saveState()
-            lx_pt = template.logo.x_mm * MM_TO_PT
-            ly_pt = template.logo.y_mm * MM_TO_PT
-            lw_pt = template.logo.width_mm * MM_TO_PT
-            lh_pt = template.logo.height_mm * MM_TO_PT
-            c.translate(lx_pt, ly_pt)
-            c.scale(1, -1)
-            c.drawImage(str(l_path), 0, -lh_pt, width=lw_pt, height=lh_pt, mask="auto")
-            c.restoreState()
-
-    # 3. Text Blocks (Stroke + Fill for readability)
-    overrides = voucher.text_overrides if voucher else {}
-    for tb in template.text_blocks:
-        c.saveState()
-        display_text = overrides.get(tb.id, tb.text)
-        tx_pt = tb.x_mm * MM_TO_PT
-        ty_pt = tb.y_mm * MM_TO_PT
-        c.translate(tx_pt, ty_pt)
-        c.scale(1, -1)
-
-        fill_r, fill_g, fill_b = _hex_to_rgb(tb.color_hex)
-        stroke_hex = _get_contrast_stroke(tb.color_hex)
-        strk_r, strk_g, strk_b = _hex_to_rgb(stroke_hex)
-
-        c.setFont("Helvetica-Bold", tb.font_size_pt)
-        
-        # Stroke layer
-        c.setStrokeColorRGB(strk_r, strk_g, strk_b)
-        c.setFillColorRGB(fill_r, fill_g, fill_b)
-        c.setLineWidth(max(0.6, tb.font_size_pt * 0.08))
-
-        text_obj = c.beginText(0, -tb.font_size_pt * 0.8)
-        text_obj.setTextRenderMode(2)  # 2 = Fill then stroke text
-        text_obj.textLine(display_text)
-        c.drawText(text_obj)
-
-        c.restoreState()
-
-    # 4. Code Box & Barcode
-    cb = template.code_box
-    cb_x = cb.x_mm * MM_TO_PT
-    cb_y = cb.y_mm * MM_TO_PT
-    cb_w = cb.width_mm * MM_TO_PT
-    cb_h = cb.height_mm * MM_TO_PT
-    code_value = voucher.code if voucher else item.item_id
-
-    # 4a. Draw background box first
-    c.saveState()
-    c.translate(cb_x, cb_y)
-    c.scale(1, -1)
-    c.setFillColor(HexColor("#FFFFFF"))
-    c.setStrokeColor(HexColor("#0F172A"))
-    c.setLineWidth(0.6)
-    c.roundRect(0, -cb_h, cb_w, cb_h, 3, fill=1, stroke=1)
-    c.restoreState()
-
-    # 4b. Draw barcode on top
-    if cb.show_barcode:
-        barcode_h_pt = cb_h * 0.52
-        barcode = Code128(
-            code_value,
-            barWidth=0.8,
-            barHeight=barcode_h_pt,
-            humanReadable=False,
-            checksum=0,
+    cut_mark_lines: list[str] = []
+    for mark in page.cut_marks:
+        cut_mark_lines.append(
+            f'<line x1="{mark.x1_mm}" y1="{mark.y1_mm}" x2="{mark.x2_mm}" y2="{mark.y2_mm}" '
+            f'stroke="#94A3B8" stroke-width="0.25" stroke-linecap="round" />'
         )
 
-        c.saveState()
-        bx = cb_x + max(0.0, (cb_w - barcode.width) / 2.0)
-        by = cb_y + 3.0
-        c.translate(bx, by)
-        c.scale(1, -1)
-        barcode.drawOn(c, 0, -barcode_h_pt)
-        c.restoreState()
+    voucher_elements: list[str] = []
+    for item in page.items:
+        voucher = vouchers_map.get(item.item_id)
+        template_id = voucher.template_id if voucher else "default"
+        template = templates_map.get(template_id) or next(iter(templates_map.values()))
 
-        # Text label under barcode
-        c.saveState()
-        c.translate(cb_x + (cb_w / 2.0), cb_y + cb_h - 2.5)
-        c.scale(1, -1)
-        c.setFillColor(HexColor("#0F172A"))
-        c.setFont("Courier-Bold", cb.font_size_pt)
-        c.drawCentredString(0, 0, code_value)
-        c.restoreState()
-    else:
-        # Centered text label
-        c.saveState()
-        c.translate(cb_x + (cb_w / 2.0), cb_y + (cb_h / 2.0) + (cb.font_size_pt * 0.35))
-        c.scale(1, -1)
-        c.setFillColor(HexColor("#0F172A"))
-        c.setFont("Courier-Bold", cb.font_size_pt)
-        c.drawCentredString(0, 0, code_value)
-        c.restoreState()
+        overrides = voucher.text_overrides if voucher else {}
+        bg_override = voucher.bg_asset_override if voucher else None
+        logo_override = voucher.logo_asset_override if voucher else None
+        bg_color_override = getattr(voucher, "bg_color_override", None) if voucher else None
+        code_str = voucher.code if voucher else item.item_id
 
-    c.restoreState()
+        raw_voucher_svg = render_voucher_svg(
+            template=template,
+            sample_code=code_str,
+            assets_dir=assets_dir,
+            text_overrides=overrides,
+            bg_asset_override=bg_override,
+            logo_asset_override=logo_override,
+            bg_color_override=bg_color_override,
+        )
+
+        inner_content = raw_voucher_svg
+        start_idx = inner_content.find(">")
+        if start_idx != -1:
+            inner_content = inner_content[start_idx + 1 :]
+        end_idx = inner_content.rfind("</svg>")
+        if end_idx != -1:
+            inner_content = inner_content[:end_idx]
+
+        scale_val = getattr(item, "scale_factor", 1.0)
+        if abs(scale_val - 1.0) > 1e-4:
+            transform_attr = f'transform="translate({item.x_mm}, {item.y_mm}) scale({scale_val})"'
+        else:
+            transform_attr = f'transform="translate({item.x_mm}, {item.y_mm})"'
+
+        voucher_elements.append(
+            f'<g id="voucher-{html.escape(code_str)}" {transform_attr}>\n'
+            f"{inner_content}\n"
+            f"</g>"
+        )
+
+    all_marks = "\n  ".join(cut_mark_lines)
+    all_vouchers = "\n  ".join(voucher_elements)
+
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" '
+        f'viewBox="0 0 {sheet_w} {sheet_h}" width="{sheet_w}mm" height="{sheet_h}mm" '
+        f'style="background: #FFFFFF; display: block;">\n'
+        f'  <g id="cut-marks">\n  {all_marks}\n  </g>\n'
+        f'  <g id="vouchers">\n  {all_vouchers}\n  </g>\n'
+        f"</svg>"
+    )
+
+
+def render_bundle_html(
+    packing_result: PackingResult,
+    templates_map: dict[str, TemplateConfig],
+    vouchers_map: dict[str, VoucherItem],
+    output_html_path: Path | str,
+    assets_dir: Path | str = "data/assets",
+) -> Path:
+    """Generates print-ready multi-page HTML sheet with pure vector SVGs for browser printing."""
+    target_path = Path(output_html_path).resolve()
+    target_path.parent.mkdir(parents=True, exist_ok=True)
+    assets_dir_path = Path(assets_dir).resolve()
+
+    page_svgs: list[str] = [
+        _render_page_svg(
+            page=page,
+            templates_map=templates_map,
+            vouchers_map=vouchers_map,
+            assets_dir=assets_dir_path,
+        )
+        for page in packing_result.pages
+    ]
+
+    pages_html = "\n".join(
+        f'<div class="sheet">\n{svg}\n</div>' for svg in page_svgs
+    )
+    full_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{html.escape(target_path.stem)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  @page {{
+    size: A4 portrait;
+    margin: 0;
+  }}
+  * {{
+    box-sizing: border-box;
+  }}
+  body {{
+    margin: 0;
+    padding: 0;
+    background: #0f172A;
+    font-family: {FONT_STACK};
+  }}
+  .sheet {{
+    width: 210mm;
+    height: 297mm;
+    page-break-after: always;
+    break-after: page;
+    background: #ffffff;
+    margin: 20px auto;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
+    overflow: hidden;
+  }}
+  @media print {{
+    body {{
+      background: none;
+    }}
+    .sheet {{
+      margin: 0;
+      box-shadow: none;
+      page-break-after: always;
+      break-after: page;
+    }}
+  }}
+</style>
+</head>
+<body>
+{pages_html}
+</body>
+</html>"""
+
+    with open(target_path, "w", encoding="utf-8") as f:
+        f.write(full_html)
+
+    return target_path
 
 
 def render_bundle_pdf(
@@ -392,37 +388,14 @@ def render_bundle_pdf(
     output_pdf_path: Path | str,
     assets_dir: Path | str = "data/assets",
 ) -> Path:
-    """Renders all packed pages into a multi-page A4 print PDF."""
-    target_path = Path(output_pdf_path).resolve()
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-    assets_dir_path = Path(assets_dir).resolve()
-
-    pdf_canvas = canvas.Canvas(
-        str(target_path),
-        pagesize=(A4_PAGE_WIDTH_PT, A4_PAGE_HEIGHT_PT),
+    """Delegates to render_bundle_html without corrupting the .pdf binary extension."""
+    target_pdf = Path(output_pdf_path).resolve()
+    target_html = target_pdf.with_suffix(".html")
+    render_bundle_html(
+        packing_result=packing_result,
+        templates_map=templates_map,
+        vouchers_map=vouchers_map,
+        output_html_path=target_html,
+        assets_dir=assets_dir,
     )
-
-    for page in packing_result.pages:
-        for mark in page.cut_marks:
-            _draw_cut_mark(pdf_canvas, mark)
-
-        for item in page.items:
-            voucher = vouchers_map.get(item.item_id)
-            template_id = voucher.template_id if voucher else "default"
-
-            template = templates_map.get(template_id)
-            if template is None:
-                template = next(iter(templates_map.values()))
-
-            _render_voucher_on_pdf(
-                pdf_canvas,
-                item=item,
-                template=template,
-                voucher=voucher,
-                assets_dir=assets_dir_path,
-            )
-
-        pdf_canvas.showPage()
-
-    pdf_canvas.save()
-    return target_path
+    return target_html

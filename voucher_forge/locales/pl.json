@@ -24,8 +24,8 @@
   "code_prefix": "Prefiks (2-4 znaki Base31)",
   "count": "Liczba Voucherów (1-31)",
   "validity_months": "Ważność (Miesiące, 1-99)",
-  "generate_and_export": "Generuj i Eksportuj PDF",
-  "bundle_success": "Paczka wygenerowana: {count} kuponów. Pobieranie pliku PDF...",
+  "generate_and_export": "Generuj i Eksportuj Plik",
+  "bundle_success": "Paczka wygenerowana: {count} kuponów. Pobieranie pliku...",
   "add_variant": "Dodaj Wariant",
   "remove_variant": "Usuń",
   "variant_title": "Nazwa Wariantu / Oferty",
@@ -72,5 +72,7 @@
   "preset_empty_option": "-- Nowy / Niezapisany draft --",
   "preset_saved": "Zapisano preset '{name}'!",
   "preset_loaded": "Preset '{name}' wczytany!",
-  "preset_enter_id": "Podaj ID kampanii / presetu!"
+  "preset_enter_id": "Podaj ID kampanii / presetu!",
+  "print_scale": "Skala wydruku",
+  "print_scale_desc": "Proporcjonalne skalowanie voucherów na arkuszu A4"
 }

@@ -24,8 +24,8 @@
   "code_prefix": "Prefix (2-4 chars in Base31)",
   "count": "Voucher Count (1-31)",
   "validity_months": "Validity (Months, 1-99)",
-  "generate_and_export": "Generate & Export PDF",
-  "bundle_success": "Bundle generated: {count} vouchers. Downloading PDF...",
+  "generate_and_export": "Generate & Export File",
+  "bundle_success": "Bundle generated: {count} vouchers. Downloading File...",
   "add_variant": "Add Variant",
   "remove_variant": "Remove",
   "variant_title": "Variant Title / Offer Name",
@@ -72,5 +72,7 @@
   "preset_empty_option": "-- New / Unsaved Draft --",
   "preset_saved": "Preset '{name}' saved successfully!",
   "preset_loaded": "Preset '{name}' loaded!",
-  "preset_enter_id": "Please enter Campaign / Preset ID!"
+  "preset_enter_id": "Please enter Campaign / Preset ID!",
+  "print_scale": "Print Scale",
+  "print_scale_desc": "Proportionally scale vouchers on A4 sheet"
 }

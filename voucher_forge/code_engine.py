@@ -141,7 +141,7 @@ class CodeEngine:
         payload = f"{clean_prefix}{ts_part}{val_part}{ent_char}"
         check_char = compute_luhn_mod31_check_digit(payload)
 
-        return f"{clean_prefix}-{ts_part}-{val_part}-{ent_char}{check_char}"
+        return f"{clean_prefix}-{ts_part}-{val_part}-{ent_ch}{check_char}"
 
     @classmethod
     def validate_key(cls, key: str) -> bool:
@@ -213,7 +213,7 @@ class CodeEngine:
     ) -> BundleRegistry:
         if count < 1:
             raise ValueError("Amount of vouchers must be at least 1.")
-        if count > len(ALPHABET):  # 31
+        if count > len(ALPHABET):
             raise ValueError(
                 f"Max amount of vouchers per bundle is {len(ALPHABET)}."
             )
@@ -264,11 +264,11 @@ class CodeEngine:
         validity_months: int = 99,
         target_date: date | None = None,
     ) -> BundleRegistry:
-        """Generates a bundle with multiple content variants (title + subtitle + assets) sharing a base template."""
+        """Generates a bundle with multiple content variants sharing a base template."""
         total_count = sum(int(item[2]) for item in variants)
         if total_count < 1:
             raise ValueError("Amount of vouchers must be at least 1.")
-        if total_count > len(ALPHABET):  # 31
+        if total_count > len(ALPHABET):
             raise ValueError(
                 f"Max amount of vouchers per bundle is {len(ALPHABET)}."
             )
@@ -292,6 +292,9 @@ class CodeEngine:
             count = int(item[2])
             bg_override = str(item[3]) if len(item) > 3 and item[3] else None
             logo_override = str(item[4]) if len(item) > 4 and item[4] else None
+            bg_color_override = str(item[5]) if len(item) > 5 and item[5] else None
+            t_id1 = str(item[6]) if len(item) > 6 and item[6] else "tb1"
+            t_id2 = str(item[7]) if len(item) > 7 and item[7] else "tb2"
 
             for _ in range(count):
                 ent_ch = available_entropy[voucher_idx]
@@ -301,9 +304,9 @@ class CodeEngine:
 
                 overrides: dict[str, str] = {}
                 if variant_title:
-                    overrides["tb_title"] = variant_title
+                    overrides[t_id1] = variant_title
                 if variant_sub:
-                    overrides["tb_sub"] = variant_sub
+                    overrides[t_id2] = variant_sub
 
                 vouchers.append(
                     VoucherItem(
@@ -314,6 +317,7 @@ class CodeEngine:
                         text_overrides=overrides,
                         bg_asset_override=bg_override,
                         logo_asset_override=logo_override,
+                        bg_color_override=bg_color_override,
                     )
                 )
                 voucher_idx += 1
