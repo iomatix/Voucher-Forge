@@ -91,17 +91,18 @@ def render_voucher_svg(
         svg_elements.append(
             f'<rect width="{w_mm}" height="{h_mm}" fill="url(#{grad_id})" />'
         )
-    elif bg.type == "image" and bg.image_asset and assets_dir:
-        img_path = assets_dir / bg.image_asset
-        uri = _encode_image_to_base64_uri(img_path)
-        if uri:
-            svg_elements.append(
-                f'<image href="{uri}" width="{w_mm}" height="{h_mm}" preserveAspectRatio="xMidYMid slice" />'
-            )
-        else:
-            svg_elements.append(
-                f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
-            )
+    elif bg.type == "image":
+        # Always draw solid base color under transparent PNG/SVG images
+        svg_elements.append(
+            f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
+        )
+        if bg.image_asset and assets_dir:
+            img_path = assets_dir / bg.image_asset
+            uri = _encode_image_to_base64_uri(img_path)
+            if uri:
+                svg_elements.append(
+                    f'<image href="{uri}" width="{w_mm}" height="{h_mm}" preserveAspectRatio="xMidYMid slice" />'
+                )
     else:
         svg_elements.append(
             f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
@@ -235,17 +236,19 @@ def _render_voucher_on_pdf(
             c.setFillColorRGB(r, g, b)
             c.setStrokeColorRGB(r, g, b)
             c.rect(step_idx * step_w, 0, step_w + 0.5, t_h_pt, fill=1, stroke=0)
-    elif bg.type == "image" and bg.image_asset:
-        img_path = assets_dir / bg.image_asset
-        if img_path.is_file():
-            c.saveState()
-            c.scale(1, -1)
-            c.drawImage(str(img_path), 0, -t_h_pt, width=t_w_pt, height=t_h_pt, mask="auto")
-            c.restoreState()
-        else:
-            r, g, b = _hex_to_rgb(bg.color_start)
-            c.setFillColorRGB(r, g, b)
-            c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
+    elif bg.type == "image":
+        # Always paint base background color under transparent PNG images
+        r, g, b = _hex_to_rgb(bg.color_start)
+        c.setFillColorRGB(r, g, b)
+        c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
+
+        if bg.image_asset:
+            img_path = assets_dir / bg.image_asset
+            if img_path.is_file():
+                c.saveState()
+                c.scale(1, -1)
+                c.drawImage(str(img_path), 0, -t_h_pt, width=t_w_pt, height=t_h_pt, mask="auto")
+                c.restoreState()
     else:
         r, g, b = _hex_to_rgb(bg.color_start)
         c.setFillColorRGB(r, g, b)
