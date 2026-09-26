@@ -5,12 +5,13 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 from nicegui import run, ui
 
 from voucher_forge.code_engine import CodeEngine
 from voucher_forge.packer import pack_vouchers
-from voucher_forge.renderer import render_bundle_pdf
+from voucher_forge.renderer import render_bundle_pdf, render_voucher_svg
 from voucher_forge.ui.state import AppState
 
 
@@ -19,14 +20,28 @@ class VariantRow:
     title: str
     sub_text: str
     count: int
+    bg_asset: str | None = None
+    logo_asset: str | None = None
 
 
 class BatchForgeView:
     def __init__(self, state: AppState) -> None:
         self.state = state
+        self.preview_containers: dict[int, ui.html] = {}
         self.variants: list[VariantRow] = [
             VariantRow("DINNER FOR TWO", "Includes starter, main course, and dessert", 3),
             VariantRow("RELAX MASSAGE", "60-minute full body hot stone session", 2),
+        ]
+
+    def _get_available_assets(self) -> list[str]:
+        assets_dir = self.state.storage.assets_dir
+        if not assets_dir.exists():
+            return []
+        valid_exts = {".png", ".jpg", ".jpeg", ".svg"}
+        return [
+            f.name
+            for f in assets_dir.iterdir()
+            if f.is_file() and f.suffix.lower() in valid_exts
         ]
 
     def render(self) -> None:
@@ -34,7 +49,7 @@ class BatchForgeView:
         template_options = {t.id: t.name for t in templates}
 
         with ui.column().classes(
-            "w-full max-w-3xl mx-auto bg-white p-8 rounded-lg shadow-sm border border-slate-200"
+            "w-full max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-sm border border-slate-200"
         ):
             self.header_lbl = ui.label(self.state.t("forge_header")).classes(
                 "text-xl font-bold text-slate-800 mb-4"
@@ -44,7 +59,7 @@ class BatchForgeView:
                 options=template_options,
                 value=self.state.active_template.id,
                 label=self.state.t("select_template"),
-                on_change=lambda _: self._update_summary(),
+                on_change=lambda _: self._on_template_change(),
             ).classes("w-full mb-3")
 
             with ui.row().classes("w-full gap-4"):
@@ -98,44 +113,104 @@ class BatchForgeView:
 
         self.state.register_lang_listener(self._update_labels)
 
+    def _render_variant_svg(self, row: VariantRow) -> str:
+        tmpl = self.state.storage.load_template(self.template_select.value)
+        overrides = {}
+        if len(tmpl.text_blocks) > 0:
+            overrides[tmpl.text_blocks[0].id] = row.title
+        if len(tmpl.text_blocks) > 1:
+            overrides[tmpl.text_blocks[1].id] = row.sub_text
+
+        return render_voucher_svg(
+            template=tmpl,
+            sample_code="KPN-25W-12-8K",
+            assets_dir=self.state.storage.assets_dir,
+            text_overrides=overrides,
+            bg_asset_override=row.bg_asset,
+            logo_asset_override=row.logo_asset,
+        )
+
     def _render_variants_table(self) -> None:
         self.variants_container.clear()
+        self.preview_containers.clear()
+        assets = [""] + self._get_available_assets()
+
         with self.variants_container:
             for idx, row in enumerate(self.variants):
-                with ui.card().classes("w-full p-4 bg-slate-50 border border-slate-200"):
-                    with ui.row().classes("w-full items-center gap-3"):
-                        ui.input(
-                            value=row.title,
-                            label=self.state.t("variant_title"),
-                            on_change=lambda e, r=row: self._set_field(r, "title", e.value),
-                        ).classes("flex-1 font-semibold")
+                with (
+                    ui.card().classes("w-full p-4 bg-slate-50 border border-slate-200"),
+                    ui.row().classes("w-full items-start gap-4"),
+                ):
+                    # Mini preview SVG container
+                    preview_box = ui.html(
+                        self._render_variant_svg(row)
+                    ).classes(
+                        "w-44 border border-slate-200 rounded bg-white p-1 shrink-0 self-center"
+                    )
+                    self.preview_containers[idx] = preview_box
 
-                        ui.number(
-                            value=row.count,
-                            label=self.state.t("variant_qty"),
-                            min=1,
-                            max=31,
-                            step=1,
-                            on_change=lambda e, r=row: self._set_variant_count(
-                                r, int(e.value or 1)
-                            ),
-                        ).classes("w-24")
+                    # Inputs Column
+                    with ui.column().classes("flex-1 gap-2"):
+                        with ui.row().classes("w-full items-center gap-3"):
+                            ui.input(
+                                value=row.title,
+                                label=self.state.t("variant_title"),
+                                on_change=lambda e, r=row, i=idx: self._update_row_field(
+                                    r, i, "title", e.value
+                                ),
+                            ).classes("flex-1 font-semibold")
 
-                        ui.button(
-                            icon="delete",
-                            color="negative",
-                            on_click=lambda _, i=idx: self._remove_variant_row(i),
-                        ).props("flat dense").classes("mt-2")
+                            ui.number(
+                                value=row.count,
+                                label=self.state.t("variant_qty"),
+                                min=1,
+                                max=31,
+                                step=1,
+                                on_change=lambda e, r=row: self._set_variant_count(
+                                    r, int(e.value or 1)
+                                ),
+                            ).classes("w-24")
 
-                    with ui.row().classes("w-full mt-1"):
+                            ui.button(
+                                icon="delete",
+                                color="negative",
+                                on_click=lambda _, i=idx: self._remove_variant_row(i),
+                            ).props("flat dense").classes("mt-2")
+
                         ui.input(
                             value=row.sub_text,
                             label=self.state.t("sub_text"),
-                            on_change=lambda e, r=row: self._set_field(r, "sub_text", e.value),
+                            on_change=lambda e, r=row, i=idx: self._update_row_field(
+                                r, i, "sub_text", e.value
+                            ),
                         ).classes("w-full text-sm")
 
-    def _set_field(self, row: VariantRow, field_name: str, value: str) -> None:
+                        # Per-variant asset selectors
+                        with ui.row().classes("w-full gap-2 mt-1"):
+                            ui.select(
+                                options=assets,
+                                value=row.bg_asset or "",
+                                label="Grafika Tła",
+                                on_change=lambda e, r=row, i=idx: self._update_row_field(
+                                    r, i, "bg_asset", e.value or None
+                                ),
+                            ).classes("flex-1 text-xs")
+
+                            ui.select(
+                                options=assets,
+                                value=row.logo_asset or "",
+                                label="Logo / Sticker",
+                                on_change=lambda e, r=row, i=idx: self._update_row_field(
+                                    r, i, "logo_asset", e.value or None
+                                ),
+                            ).classes("flex-1 text-xs")
+
+    def _update_row_field(
+        self, row: VariantRow, index: int, field_name: str, value: Any
+    ) -> None:
         setattr(row, field_name, value)
+        if index in self.preview_containers:
+            self.preview_containers[index].content = self._render_variant_svg(row)
 
     def _set_variant_count(self, row: VariantRow, count: int) -> None:
         row.count = count
@@ -157,6 +232,10 @@ class BatchForgeView:
             self.variants.pop(index)
             self._render_variants_table()
             self._update_summary()
+
+    def _on_template_change(self) -> None:
+        self._update_summary()
+        self._render_variants_table()
 
     def _update_summary(self) -> None:
         total = sum(r.count for r in self.variants)
@@ -194,7 +273,7 @@ class BatchForgeView:
     async def _handle_generation(self) -> None:
         try:
             variant_tuples = [
-                (r.title.strip(), r.sub_text.strip(), r.count)
+                (r.title.strip(), r.sub_text.strip(), r.count, r.bg_asset, r.logo_asset)
                 for r in self.variants
                 if r.title.strip()
             ]

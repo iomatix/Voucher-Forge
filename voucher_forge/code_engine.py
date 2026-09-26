@@ -253,20 +253,19 @@ class CodeEngine:
             vouchers=vouchers,
         )
 
-
     @classmethod
     def generate_campaign_bundle(
         cls,
         bundle_id: str,
         bundle_name: str,
         template_id: str,
-        variants: list[tuple[str, str, int]],
+        variants: list[tuple[Any, ...]],
         prefix: str,
         validity_months: int = 99,
         target_date: date | None = None,
     ) -> BundleRegistry:
-        """Generates a bundle with multiple content variants (title + subtitle) sharing a base template."""
-        total_count = sum(count for _, _, count in variants)
+        """Generates a bundle with multiple content variants (title + subtitle + assets) sharing a base template."""
+        total_count = sum(int(item[2]) for item in variants)
         if total_count < 1:
             raise ValueError("Amount of vouchers must be at least 1.")
         if total_count > len(ALPHABET):  # 31
@@ -287,7 +286,13 @@ class CodeEngine:
         secrets.SystemRandom().shuffle(available_entropy)
 
         voucher_idx = 0
-        for variant_title, variant_sub, count in variants:
+        for item in variants:
+            variant_title = str(item[0])
+            variant_sub = str(item[1])
+            count = int(item[2])
+            bg_override = str(item[3]) if len(item) > 3 and item[3] else None
+            logo_override = str(item[4]) if len(item) > 4 and item[4] else None
+
             for _ in range(count):
                 ent_ch = available_entropy[voucher_idx]
                 payload = f"{clean_prefix}{ts_part}{val_part}{ent_ch}"
@@ -307,6 +312,8 @@ class CodeEngine:
                         status=VoucherStatus.ACTIVE,
                         created_at=created_at_iso,
                         text_overrides=overrides,
+                        bg_asset_override=bg_override,
+                        logo_asset_override=logo_override,
                     )
                 )
                 voucher_idx += 1

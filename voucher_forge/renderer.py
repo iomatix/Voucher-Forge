@@ -65,6 +65,8 @@ def render_voucher_svg(
     sample_code: str = "URO-K9A-03-7B",
     assets_dir: Path | None = None,
     text_overrides: dict[str, str] | None = None,
+    bg_asset_override: str | None = None,
+    logo_asset_override: str | None = None,
 ) -> str:
     """Renders a standalone, proportional SVG XML representation of a voucher for UI preview."""
     w_mm = template.width_mm
@@ -74,7 +76,10 @@ def render_voucher_svg(
 
     # 1. Background layer
     bg = template.background
-    if bg.type == "gradient" and bg.color_end:
+    eff_bg_type = "image" if bg_asset_override else bg.type
+    eff_bg_asset = bg_asset_override or bg.image_asset
+
+    if eff_bg_type == "gradient" and bg.color_end:
         angle_rad = math.radians(bg.gradient_angle_deg)
         x1 = round(50 - 50 * math.cos(angle_rad), 2)
         y1 = round(50 - 50 * math.sin(angle_rad), 2)
@@ -91,13 +96,13 @@ def render_voucher_svg(
         svg_elements.append(
             f'<rect width="{w_mm}" height="{h_mm}" fill="url(#{grad_id})" />'
         )
-    elif bg.type == "image":
-        # Always draw solid base color under transparent PNG/SVG images
+    elif eff_bg_type == "image":
+        # Base color behind transparent images
         svg_elements.append(
             f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
         )
-        if bg.image_asset and assets_dir:
-            img_path = assets_dir / bg.image_asset
+        if eff_bg_asset and assets_dir:
+            img_path = assets_dir / eff_bg_asset
             uri = _encode_image_to_base64_uri(img_path)
             if uri:
                 svg_elements.append(
@@ -110,7 +115,8 @@ def render_voucher_svg(
 
     # 2. Logo layer
     if template.logo and assets_dir:
-        l_path = assets_dir / template.logo.asset_filename
+        eff_logo_asset = logo_asset_override or template.logo.asset_filename
+        l_path = assets_dir / eff_logo_asset
         uri = _encode_image_to_base64_uri(l_path)
         if uri:
             svg_elements.append(
@@ -221,9 +227,15 @@ def _render_voucher_on_pdf(
     t_w_pt = template.width_mm * MM_TO_PT
     t_h_pt = template.height_mm * MM_TO_PT
 
+    bg_override = voucher.bg_asset_override if voucher else None
+    logo_override = voucher.logo_asset_override if voucher else None
+
+    eff_bg_type = "image" if bg_override else template.background.type
+    eff_bg_asset = bg_override or template.background.image_asset
+
     # 1. Background
     bg = template.background
-    if bg.type == "gradient" and bg.color_end:
+    if eff_bg_type == "gradient" and bg.color_end:
         r1, g1, b1 = _hex_to_rgb(bg.color_start)
         r2, g2, b2 = _hex_to_rgb(bg.color_end)
         steps = 40
@@ -236,14 +248,14 @@ def _render_voucher_on_pdf(
             c.setFillColorRGB(r, g, b)
             c.setStrokeColorRGB(r, g, b)
             c.rect(step_idx * step_w, 0, step_w + 0.5, t_h_pt, fill=1, stroke=0)
-    elif bg.type == "image":
-        # Always paint base background color under transparent PNG images
+    elif eff_bg_type == "image":
+        # Base color behind transparent images
         r, g, b = _hex_to_rgb(bg.color_start)
         c.setFillColorRGB(r, g, b)
         c.rect(0, 0, t_w_pt, t_h_pt, fill=1, stroke=0)
 
-        if bg.image_asset:
-            img_path = assets_dir / bg.image_asset
+        if eff_bg_asset:
+            img_path = assets_dir / eff_bg_asset
             if img_path.is_file():
                 c.saveState()
                 c.scale(1, -1)
@@ -256,14 +268,14 @@ def _render_voucher_on_pdf(
 
     # 2. Logo
     if template.logo:
-        logo = template.logo
-        l_path = assets_dir / logo.asset_filename
+        eff_logo_asset = logo_override or template.logo.asset_filename
+        l_path = assets_dir / eff_logo_asset
         if l_path.is_file():
             c.saveState()
-            lx_pt = logo.x_mm * MM_TO_PT
-            ly_pt = logo.y_mm * MM_TO_PT
-            lw_pt = logo.width_mm * MM_TO_PT
-            lh_pt = logo.height_mm * MM_TO_PT
+            lx_pt = template.logo.x_mm * MM_TO_PT
+            ly_pt = template.logo.y_mm * MM_TO_PT
+            lw_pt = template.logo.width_mm * MM_TO_PT
+            lh_pt = template.logo.height_mm * MM_TO_PT
             c.translate(lx_pt, ly_pt)
             c.scale(1, -1)
             c.drawImage(str(l_path), 0, -lh_pt, width=lw_pt, height=lh_pt, mask="auto")

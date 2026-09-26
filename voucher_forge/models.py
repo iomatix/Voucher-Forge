@@ -182,6 +182,8 @@ class VoucherItem:
     created_at: str
     redeemed_at: str | None = None
     text_overrides: dict[str, str] = field(default_factory=dict)
+    bg_asset_override: str | None = None
+    logo_asset_override: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
