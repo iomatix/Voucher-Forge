@@ -1,6 +1,7 @@
 """Unit tests verifying CodeEngine contracts, Luhn mod 31 algorithm, and bundle generation."""
 
 from datetime import date
+
 import pytest
 
 from voucher_forge.code_engine import (

@@ -11,15 +11,20 @@ import html
 import math
 import mimetypes
 from pathlib import Path
-from typing import Any
 
 from reportlab.graphics.barcode.code128 import Code128
-from reportlab.lib.colors import Color, HexColor, gray
+from reportlab.lib.colors import HexColor, gray
 from reportlab.lib.units import mm as MM_TO_PT
 from reportlab.pdfgen import canvas
 
 from voucher_forge.models import TemplateConfig, VoucherItem
-from voucher_forge.packer import A4_HEIGHT_MM, A4_WIDTH_MM, CutMark, PackedItem, PackingResult
+from voucher_forge.packer import (
+    A4_HEIGHT_MM,
+    A4_WIDTH_MM,
+    CutMark,
+    PackedItem,
+    PackingResult,
+)
 
 A4_PAGE_WIDTH_PT = A4_WIDTH_MM * MM_TO_PT
 A4_PAGE_HEIGHT_PT = A4_HEIGHT_MM * MM_TO_PT
@@ -169,7 +174,7 @@ def render_voucher_svg(
             f'text-anchor="middle">{html.escape(sample_code)}</text>'
         )
 
-    defs_block = f"<defs>\n" + "\n".join(defs_elements) + "\n</defs>\n" if defs_elements else ""
+    defs_block = "<defs>\n" + "\n".join(defs_elements) + "\n</defs>\n" if defs_elements else ""
     body = "\n  ".join(svg_elements)
 
     return (

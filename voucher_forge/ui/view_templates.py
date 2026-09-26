@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import re
 from typing import Any
+
 from nicegui import events, ui
 
-from voucher_forge.models import LogoConfig, TemplateConfig
+from voucher_forge.models import LogoConfig
 from voucher_forge.renderer import render_voucher_svg
 from voucher_forge.ui.state import AppState
 
@@ -225,63 +226,65 @@ class TemplateStudioView:
                     )
 
                 # Barcode / Code Box Geometry Section
-                with ui.expansion(
-                    self.state.t("code_box_header"), icon="qr_code"
-                ).classes("w-full bg-slate-50 border border-slate-200 rounded my-2"):
-                    with ui.column().classes("w-full p-2 gap-2"):
-                        self.barcode_checkbox = ui.checkbox(
-                            self.state.t("show_barcode"),
-                            value=self.state.active_template.code_box.show_barcode,
+                with (
+                    ui.expansion(
+                        self.state.t("code_box_header"), icon="qr_code"
+                    ).classes("w-full bg-slate-50 border border-slate-200 rounded my-2"),
+                    ui.column().classes("w-full p-2 gap-2"),
+                ):
+                    self.barcode_checkbox = ui.checkbox(
+                        self.state.t("show_barcode"),
+                        value=self.state.active_template.code_box.show_barcode,
+                        on_change=lambda e: self._update_active_and_refresh(
+                            "show_barcode", e.value
+                        ),
+                    )
+
+                    with ui.row().classes("w-full gap-2"):
+                        self.cb_x_input = ui.number(
+                            label=self.state.t("pos_x_mm"),
+                            value=self.state.active_template.code_box.x_mm,
+                            format="%.1f",
+                            min=0.0,
+                            step=1.0,
                             on_change=lambda e: self._update_active_and_refresh(
-                                "show_barcode", e.value
+                                "cb_x", e.value
                             ),
-                        )
+                        ).classes("flex-1")
 
-                        with ui.row().classes("w-full gap-2"):
-                            self.cb_x_input = ui.number(
-                                label=self.state.t("pos_x_mm"),
-                                value=self.state.active_template.code_box.x_mm,
-                                format="%.1f",
-                                min=0.0,
-                                step=1.0,
-                                on_change=lambda e: self._update_active_and_refresh(
-                                    "cb_x", e.value
-                                ),
-                            ).classes("flex-1")
+                        self.cb_y_input = ui.number(
+                            label=self.state.t("pos_y_mm"),
+                            value=self.state.active_template.code_box.y_mm,
+                            format="%.1f",
+                            min=0.0,
+                            step=1.0,
+                            on_change=lambda e: self._update_active_and_refresh(
+                                "cb_y", e.value
+                            ),
+                        ).classes("flex-1")
 
-                            self.cb_y_input = ui.number(
-                                label=self.state.t("pos_y_mm"),
-                                value=self.state.active_template.code_box.y_mm,
-                                format="%.1f",
-                                min=0.0,
-                                step=1.0,
-                                on_change=lambda e: self._update_active_and_refresh(
-                                    "cb_y", e.value
-                                ),
-                            ).classes("flex-1")
+                    with ui.row().classes("w-full gap-2"):
+                        self.cb_w_input = ui.number(
+                            label=self.state.t("box_width_mm"),
+                            value=self.state.active_template.code_box.width_mm,
+                            format="%.1f",
+                            min=20.0,
+                            step=1.0,
+                            on_change=lambda e: self._update_active_and_refresh(
+                                "cb_w", e.value
+                            ),
+                        ).classes("flex-1")
 
-                        with ui.row().classes("w-full gap-2"):
-                            self.cb_w_input = ui.number(
-                                label=self.state.t("box_width_mm"),
-                                value=self.state.active_template.code_box.width_mm,
-                                format="%.1f",
-                                min=20.0,
-                                step=1.0,
-                                on_change=lambda e: self._update_active_and_refresh(
-                                    "cb_w", e.value
-                                ),
-                            ).classes("flex-1")
-
-                            self.cb_h_input = ui.number(
-                                label=self.state.t("box_height_mm"),
-                                value=self.state.active_template.code_box.height_mm,
-                                format="%.1f",
-                                min=10.0,
-                                step=1.0,
-                                on_change=lambda e: self._update_active_and_refresh(
-                                    "cb_h", e.value
-                                ),
-                            ).classes("flex-1")
+                        self.cb_h_input = ui.number(
+                            label=self.state.t("box_height_mm"),
+                            value=self.state.active_template.code_box.height_mm,
+                            format="%.1f",
+                            min=10.0,
+                            step=1.0,
+                            on_change=lambda e: self._update_active_and_refresh(
+                                "cb_h", e.value
+                            ),
+                        ).classes("flex-1")
 
                 # Asset Upload Section
                 ui.label(self.state.t("upload_asset")).classes(

@@ -8,13 +8,12 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from voucher_forge.models import (
     BundleRegistry,
-    SchemaVersionMismatchError,
     TemplateConfig,
     VoucherStatus,
 )
@@ -125,7 +124,7 @@ class StorageRepository:
             if voucher.code == code:
                 voucher.status = new_status
                 if new_status == VoucherStatus.REDEEMED:
-                    voucher.redeemed_at = datetime.now(timezone.utc).isoformat()
+                    voucher.redeemed_at = datetime.now(UTC).isoformat()
                 elif new_status == VoucherStatus.ACTIVE:
                     voucher.redeemed_at = None
                 found = True

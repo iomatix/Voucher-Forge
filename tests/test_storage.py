@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
 
 from voucher_forge.models import (
@@ -159,9 +160,11 @@ def test_load_bundle_not_found(temp_repo: StorageRepository) -> None:
 def test_atomic_write_cleans_up_on_failure(temp_repo: StorageRepository) -> None:
     template = create_sample_template("crash_test")
 
-    with patch("os.replace", side_effect=OSError("Atomic replacement failed")):
-        with pytest.raises(OSError, match="Atomic replacement failed"):
-            temp_repo.save_template(template)
+    with (
+        patch("os.replace", side_effect=OSError("Atomic replacement failed")),
+        pytest.raises(OSError, match="Atomic replacement failed"),
+    ):
+        temp_repo.save_template(template)
 
     target_file = temp_repo.templates_dir / "crash_test.json"
     assert not target_file.exists()

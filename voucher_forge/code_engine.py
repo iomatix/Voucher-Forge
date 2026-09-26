@@ -7,7 +7,7 @@ Zero-UI coupling: standard Python library only.
 from __future__ import annotations
 
 import secrets
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 from voucher_forge.models import BundleRegistry, VoucherItem, VoucherStatus
@@ -127,7 +127,7 @@ class CodeEngine:
         entropy_char: str | None = None,
     ) -> str:
         clean_prefix = cls._normalize_prefix(prefix)
-        date_effective = target_date if target_date is not None else date.today()
+        date_effective = target_date if target_date is not None else datetime.now(UTC).date()
         ts_part = cls._encode_timestamp(date_effective)
         val_part = cls._format_validity(validity_months)
 
@@ -220,11 +220,11 @@ class CodeEngine:
 
         clean_prefix = cls._normalize_prefix(prefix)
         cls._format_validity(validity_months)
-        date_effective = target_date if target_date is not None else date.today()
+        date_effective = target_date if target_date is not None else datetime.now(UTC).date()
         ts_part = cls._encode_timestamp(date_effective)
         val_part = cls._format_validity(validity_months)
 
-        created_at_iso = datetime.now(timezone.utc).isoformat()
+        created_at_iso = datetime.now(UTC).isoformat()
         vouchers: list[VoucherItem] = []
 
         available_entropy = list(ALPHABET)
@@ -276,11 +276,11 @@ class CodeEngine:
 
         clean_prefix = cls._normalize_prefix(prefix)
         cls._format_validity(validity_months)
-        date_effective = target_date if target_date is not None else date.today()
+        date_effective = target_date if target_date is not None else datetime.now(UTC).date()
         ts_part = cls._encode_timestamp(date_effective)
         val_part = cls._format_validity(validity_months)
 
-        created_at_iso = datetime.now(timezone.utc).isoformat()
+        created_at_iso = datetime.now(UTC).isoformat()
         vouchers: list[VoucherItem] = []
 
         available_entropy = list(ALPHABET)

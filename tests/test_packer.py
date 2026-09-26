@@ -5,9 +5,6 @@ import pytest
 from voucher_forge.packer import (
     A4_HEIGHT_MM,
     A4_WIDTH_MM,
-    DEFAULT_MARGIN_MM,
-    DEFAULT_SPACING_MM,
-    CutMark,
     PackedItem,
     pack_vouchers,
 )

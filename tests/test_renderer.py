@@ -1,6 +1,7 @@
 """Unit tests verifying SVG live preview and multi-page PDF generation."""
 
 from pathlib import Path
+
 import pytest
 
 from voucher_forge.models import (

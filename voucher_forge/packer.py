@@ -8,7 +8,6 @@ Zero-UI coupling: standard Python library only.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-import math
 
 A4_WIDTH_MM: float = 210.0
 A4_HEIGHT_MM: float = 297.0

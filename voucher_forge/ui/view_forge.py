@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import date
 import math
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
 from nicegui import run, ui
 
 from voucher_forge.code_engine import CodeEngine
@@ -49,7 +50,7 @@ class BatchForgeView:
             with ui.row().classes("w-full gap-4"):
                 self.b_id = ui.input(
                     label=self.state.t("bundle_id"),
-                    value=f"campaign_{date.today().strftime('%Y%m%d')}",
+                    value=f"campaign_{datetime.now(UTC).date().strftime('%Y%m%d')}",
                 ).classes("flex-1")
 
                 self.b_name = ui.input(
@@ -233,5 +234,5 @@ class BatchForgeView:
             )
             ui.download(f"/exports/{output_pdf.name}")
 
-        except Exception as exc:
+        except (ValueError, OSError, RuntimeError) as exc:
             ui.notify(f"Generation Error: {exc}", type="negative")
