@@ -224,7 +224,7 @@ def _render_voucher_on_pdf(
         if img_path.is_file():
             c.saveState()
             c.scale(1, -1)
-            c.drawImage(str(img_path), 0, -t_h_pt, width=t_w_pt, height=t_h_pt)
+            c.drawImage(str(img_path), 0, -t_h_pt, width=t_w_pt, height=t_h_pt, mask="auto")
             c.restoreState()
         else:
             r, g, b = _hex_to_rgb(bg.color_start)
@@ -265,7 +265,7 @@ def _render_voucher_on_pdf(
         c.drawString(0, -tb.font_size_pt * 0.8, display_text)
         c.restoreState()
 
-    # 4. Code Box & Barcode
+    # 4. Code Box & Barcode (Background must precede barcode drawing)
     cb = template.code_box
     cb_x = cb.x_mm * MM_TO_PT
     cb_y = cb.y_mm * MM_TO_PT
@@ -273,11 +273,17 @@ def _render_voucher_on_pdf(
     cb_h = cb.height_mm * MM_TO_PT
     code_value = voucher.code if voucher else item.item_id
 
+    # 4a. Draw background box first
+    c.saveState()
+    c.translate(cb_x, cb_y)
+    c.scale(1, -1)
     c.setFillColor(HexColor("#FFFFFF"))
     c.setStrokeColor(HexColor("#0F172A"))
-    c.setLineWidth(0.5)
-    c.roundRect(cb_x, cb_y, cb_w, cb_h, 3, fill=1, stroke=1)
+    c.setLineWidth(0.6)
+    c.roundRect(0, -cb_h, cb_w, cb_h, 3, fill=1, stroke=1)
+    c.restoreState()
 
+    # 4b. Draw barcode on top
     if cb.show_barcode:
         barcode_h_pt = cb_h * 0.52
         barcode = Code128(
@@ -290,29 +296,28 @@ def _render_voucher_on_pdf(
 
         c.saveState()
         bx = cb_x + max(0.0, (cb_w - barcode.width) / 2.0)
-        by = cb_y + cb_h - 3.0
+        by = cb_y + 3.0
         c.translate(bx, by)
         c.scale(1, -1)
-        barcode.drawOn(c, 0, 0)
+        barcode.drawOn(c, 0, -barcode_h_pt)
         c.restoreState()
 
         # Text label under barcode
         c.saveState()
+        c.translate(cb_x + (cb_w / 2.0), cb_y + cb_h - 2.5)
         c.scale(1, -1)
         c.setFillColor(HexColor("#0F172A"))
         c.setFont("Courier-Bold", cb.font_size_pt)
-        label_x = cb_x + (cb_w / 2.0)
-        label_y = -(cb_y + cb_h - 3.0)
-        c.drawCentredString(label_x, label_y, code_value)
+        c.drawCentredString(0, 0, code_value)
         c.restoreState()
     else:
+        # Centered text label
         c.saveState()
+        c.translate(cb_x + (cb_w / 2.0), cb_y + (cb_h / 2.0) + (cb.font_size_pt * 0.35))
         c.scale(1, -1)
         c.setFillColor(HexColor("#0F172A"))
         c.setFont("Courier-Bold", cb.font_size_pt)
-        label_x = cb_x + (cb_w / 2.0)
-        label_y = -(cb_y + (cb_h / 2.0) - (cb.font_size_pt * 0.3))
-        c.drawCentredString(label_x, label_y, code_value)
+        c.drawCentredString(0, 0, code_value)
         c.restoreState()
 
     c.restoreState()

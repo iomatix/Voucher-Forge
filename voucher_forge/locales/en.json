@@ -46,5 +46,12 @@
   "code_invalid_msg": "Invalid code structure or checksum mismatch.",
   "redeemed_success": "Voucher {code} marked as REDEEMED.",
   "code_not_found": "Voucher not found in bundle storage.",
-  "unlimited": "Unlimited"
+  "unlimited": "Unlimited",
+  "upload_asset": "Upload Asset (Logo / Background)",
+  "upload_asset_desc": "Supported formats: PNG, JPG, JPEG, SVG (max 5MB)",
+  "asset_uploaded": "File {filename} uploaded successfully.",
+  "select_image_asset": "Select Image Asset",
+  "none_option": "None",
+  "save_as_new": "Save As New Template",
+  "template_created": "Created new template: {name}."
 }

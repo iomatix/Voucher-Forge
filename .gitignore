@@ -36,14 +36,18 @@ htmlcov/
 Thumbs.db
 tempCodeRunnerFile.py
 
-# --- Runtime Data & Storage Engine Integrity ---
-# Ignore all generated JSON databases, PDFs, presets and temporary atomic buffers
-data/templates/*.json
-data/bundles/*.json
-data/presets/*.json
+# --- Runtime Data & Storage Engine Isolation ---
+# Block all dynamic user data, saves, generated PDFs and uploaded graphics
 data/exports/*
-data/**/.tmp_*
+data/bundles/*
 data/assets/*
+data/**/.tmp_*
 
-# Keep asset directory structure tracked in git
+# Ignore user custom templates while keeping directories in git
+data/templates/*.json
+
+# Keep empty directory structures tracked in Git
 !data/assets/.gitkeep
+!data/exports/.gitkeep
+!data/bundles/.gitkeep
+!data/templates/.gitkeep

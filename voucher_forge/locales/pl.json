@@ -46,5 +46,12 @@
   "code_invalid_msg": "Błędna struktura kodu lub niezgodna suma kontrolna.",
   "redeemed_success": "Kupon {code} oznaczony jako ZREALIZOWANY.",
   "code_not_found": "Kupon nie istnieje w bazie danych.",
-  "unlimited": "Bezterminowy"
+  "unlimited": "Bezterminowy",
+  "upload_asset": "Wgraj Grafikę (Logo / Tło)",
+  "upload_asset_desc": "Obsługiwane formaty: PNG, JPG, JPEG, SVG (max 5MB)",
+  "asset_uploaded": "Plik {filename} został wgrany pomyślnie.",
+  "select_image_asset": "Wybierz Plik Graficzny",
+  "none_option": "Brak",
+  "save_as_new": "Zapisz Jako Nowy Szablon",
+  "template_created": "Utworzono nowy szablon: {name}."
 }
