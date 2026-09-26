@@ -53,5 +53,6 @@
   "select_image_asset": "Wybierz Plik Graficzny",
   "none_option": "Brak",
   "save_as_new": "Zapisz Jako Nowy Szablon",
-  "template_created": "Utworzono nowy szablon: {name}."
+  "template_created": "Utworzono nowy szablon: {name}.",
+  "text_color": "Kolor Tekstu"
 }

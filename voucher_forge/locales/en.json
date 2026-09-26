@@ -53,5 +53,6 @@
   "select_image_asset": "Select Image Asset",
   "none_option": "None",
   "save_as_new": "Save As New Template",
-  "template_created": "Created new template: {name}."
+  "template_created": "Created new template: {name}.",
+  "text_color": "Text Color"
 }

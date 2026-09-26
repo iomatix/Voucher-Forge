@@ -170,38 +170,53 @@ class TemplateStudioView:
                 )
 
                 # Text Configuration
-                t1 = (
-                    self.state.active_template.text_blocks[0].text
-                    if len(self.state.active_template.text_blocks) > 0
-                    else ""
-                )
-                t2 = (
-                    self.state.active_template.text_blocks[1].text
-                    if len(self.state.active_template.text_blocks) > 1
-                    else ""
-                )
+                tb_h = self.state.active_template.text_blocks[0] if len(self.state.active_template.text_blocks) > 0 else None
+                tb_s = self.state.active_template.text_blocks[1] if len(self.state.active_template.text_blocks) > 1 else None
 
-                self.header_text_input = ui.input(
-                    label=self.state.t("header_text"),
-                    value=t1,
-                    on_change=lambda e: self._update_text_block(0, e.value),
-                ).classes("w-full mb-2")
+                t1_val = tb_h.text if tb_h else ""
+                t1_col = tb_h.color_hex if tb_h else "#FFFFFF"
+                t2_val = tb_s.text if tb_s else ""
+                t2_col = tb_s.color_hex if tb_s else "#A1A1AA"
 
-                self.sub_text_input = ui.input(
-                    label=self.state.t("sub_text"),
-                    value=t2,
-                    on_change=lambda e: self._update_text_block(1, e.value),
-                ).classes("w-full mb-2")
+                # Header text + color
+                with ui.row().classes("w-full items-center gap-2 mb-2"):
+                    self.header_text_input = ui.input(
+                        label=self.state.t("header_text"),
+                        value=t1_val,
+                        on_change=lambda e: self._update_text_block(0, "text", e.value),
+                    ).classes("flex-1")
+
+                    self.header_color_input = ui.input(
+                        label=self.state.t("text_color"),
+                        value=t1_col,
+                        on_change=lambda e: self._update_text_block(0, "color_hex", e.value),
+                    ).classes("w-32")
+                    ui.color_picker(
+                        on_pick=lambda e: self._update_text_block(0, "color_hex", e.color)
+                    )
+
+                # Subtitle text + color
+                with ui.row().classes("w-full items-center gap-2 mb-2"):
+                    self.sub_text_input = ui.input(
+                        label=self.state.t("sub_text"),
+                        value=t2_val,
+                        on_change=lambda e: self._update_text_block(1, "text", e.value),
+                    ).classes("flex-1")
+
+                    self.sub_color_input = ui.input(
+                        label=self.state.t("text_color"),
+                        value=t2_col,
+                        on_change=lambda e: self._update_text_block(1, "color_hex", e.value),
+                    ).classes("w-32")
+                    ui.color_picker(
+                        on_pick=lambda e: self._update_text_block(1, "color_hex", e.color)
+                    )
 
                 self.barcode_checkbox = ui.checkbox(
                     self.state.t("show_barcode"),
                     value=self.state.active_template.code_box.show_barcode,
-                    on_change=lambda e: self._update_active_and_refresh(
-                        "show_barcode", e.value
-                    ),
+                    on_change=lambda e: self._update_active_and_refresh("show_barcode", e.value),
                 ).classes("my-2")
-
-                ui.separator().classes("my-3")
 
                 # Asset Upload Section
                 ui.label(self.state.t("upload_asset")).classes(
@@ -341,9 +356,14 @@ class TemplateStudioView:
 
         self._refresh_preview()
 
-    def _update_text_block(self, index: int, text: str) -> None:
+    def _update_text_block(self, index: int, field_name: str, value: Any) -> None:
         if index < len(self.state.active_template.text_blocks):
-            self.state.active_template.text_blocks[index].text = text
+            setattr(self.state.active_template.text_blocks[index], field_name, str(value))
+            if field_name == "color_hex":
+                if index == 0:
+                    self.header_color_input.value = str(value)
+                elif index == 1:
+                    self.sub_color_input.value = str(value)
             self._refresh_preview()
 
     def _refresh_preview(self) -> None:
@@ -388,10 +408,13 @@ class TemplateStudioView:
         self.logo_asset_select.value = tmpl.logo.asset_filename if tmpl.logo else ""
         self.logo_container.set_visibility(has_logo)
 
-        t1 = tmpl.text_blocks[0].text if len(tmpl.text_blocks) > 0 else ""
-        t2 = tmpl.text_blocks[1].text if len(tmpl.text_blocks) > 1 else ""
-        self.header_text_input.value = t1
-        self.sub_text_input.value = t2
+        tb_h = tmpl.text_blocks[0] if len(tmpl.text_blocks) > 0 else None
+        tb_s = tmpl.text_blocks[1] if len(tmpl.text_blocks) > 1 else None
+
+        self.header_text_input.value = tb_h.text if tb_h else ""
+        self.header_color_input.value = tb_h.color_hex if tb_h else "#FFFFFF"
+        self.sub_text_input.value = tb_s.text if tb_s else ""
+        self.sub_color_input.value = tb_s.color_hex if tb_s else "#A1A1AA"
 
         self._refresh_preview()
 
@@ -431,7 +454,9 @@ class TemplateStudioView:
         self.color_end_input.props(f'label="{self.state.t("color_end")}"')
         self.grad_angle_input.props(f'label="{self.state.t("gradient_angle")}"')
         self.header_text_input.props(f'label="{self.state.t("header_text")}"')
+        self.header_color_input.props(f'label="{self.state.t("text_color")}"')
         self.sub_text_input.props(f'label="{self.state.t("sub_text")}"')
+        self.sub_color_input.props(f'label="{self.state.t("text_color")}"')
         self.barcode_checkbox.text = self.state.t("show_barcode")
         self.save_btn.text = self.state.t("save_template")
         self.save_as_new_btn.text = self.state.t("save_as_new")
