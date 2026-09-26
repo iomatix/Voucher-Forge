@@ -47,10 +47,12 @@ def _encode_image_to_base64_uri(image_path: Path) -> str | None:
         encoded = base64.b64encode(f.read()).decode("ascii")
     return f"data:{mime};base64,{encoded}"
 
+
 def render_voucher_svg(
     template: TemplateConfig,
     sample_code: str = "URO-K9A-03-7B",
     assets_dir: Path | None = None,
+    text_overrides: dict[str, str] | None = None,
 ) -> str:
     """Renders a standalone, proportional SVG XML representation of a voucher for UI preview."""
     w_mm = template.width_mm
@@ -103,10 +105,12 @@ def render_voucher_svg(
                 f'width="{template.logo.width_mm}" height="{template.logo.height_mm}" preserveAspectRatio="xMidYMid meet" />'
             )
 
-    # 3. Text blocks layer (proportional viewBox user units)
+    # 3. Text blocks layer (supports dynamic text overrides)
+    overrides = text_overrides or {}
     for tb in template.text_blocks:
+        display_text = overrides.get(tb.id, tb.text)
         font_size_units = round(tb.font_size_pt * 0.352778, 3)
-        escaped_text = html.escape(tb.text)
+        escaped_text = html.escape(display_text)
         svg_elements.append(
             f'<text x="{tb.x_mm}" y="{tb.y_mm}" font-family="{html.escape(tb.font_family)}, sans-serif" '
             f'font-size="{font_size_units}" font-weight="bold" fill="{html.escape(tb.color_hex)}" '
@@ -164,7 +168,8 @@ def render_voucher_svg(
         f"  {body}\n"
         f"</svg>"
     )
-    
+
+
 def _draw_cut_mark(c: canvas.Canvas, mark: CutMark) -> None:
     c.setLineWidth(0.5)
     c.setStrokeColor(gray)
@@ -179,7 +184,7 @@ def _render_voucher_on_pdf(
     c: canvas.Canvas,
     item: PackedItem,
     template: TemplateConfig,
-    code: str,
+    voucher: VoucherItem | None,
     assets_dir: Path,
 ) -> None:
     c.saveState()
@@ -245,9 +250,11 @@ def _render_voucher_on_pdf(
             c.drawImage(str(l_path), 0, -lh_pt, width=lw_pt, height=lh_pt, mask="auto")
             c.restoreState()
 
-    # 3. Text Blocks
+    # 3. Text Blocks (supports dynamic text overrides)
+    overrides = voucher.text_overrides if voucher else {}
     for tb in template.text_blocks:
         c.saveState()
+        display_text = overrides.get(tb.id, tb.text)
         tx_pt = tb.x_mm * MM_TO_PT
         ty_pt = tb.y_mm * MM_TO_PT
         c.translate(tx_pt, ty_pt)
@@ -255,7 +262,7 @@ def _render_voucher_on_pdf(
         r, g, b = _hex_to_rgb(tb.color_hex)
         c.setFillColorRGB(r, g, b)
         c.setFont("Helvetica-Bold", tb.font_size_pt)
-        c.drawString(0, -tb.font_size_pt * 0.8, tb.text)
+        c.drawString(0, -tb.font_size_pt * 0.8, display_text)
         c.restoreState()
 
     # 4. Code Box & Barcode
@@ -264,6 +271,7 @@ def _render_voucher_on_pdf(
     cb_y = cb.y_mm * MM_TO_PT
     cb_w = cb.width_mm * MM_TO_PT
     cb_h = cb.height_mm * MM_TO_PT
+    code_value = voucher.code if voucher else item.item_id
 
     c.setFillColor(HexColor("#FFFFFF"))
     c.setStrokeColor(HexColor("#0F172A"))
@@ -273,7 +281,7 @@ def _render_voucher_on_pdf(
     if cb.show_barcode:
         barcode_h_pt = cb_h * 0.52
         barcode = Code128(
-            code,
+            code_value,
             barWidth=0.8,
             barHeight=barcode_h_pt,
             humanReadable=False,
@@ -281,7 +289,6 @@ def _render_voucher_on_pdf(
         )
 
         c.saveState()
-        # Barcode draws upward in standard Cartesian; flip back to normal orientation
         bx = cb_x + max(0.0, (cb_w - barcode.width) / 2.0)
         by = cb_y + cb_h - 3.0
         c.translate(bx, by)
@@ -296,7 +303,7 @@ def _render_voucher_on_pdf(
         c.setFont("Courier-Bold", cb.font_size_pt)
         label_x = cb_x + (cb_w / 2.0)
         label_y = -(cb_y + cb_h - 3.0)
-        c.drawCentredString(label_x, label_y, code)
+        c.drawCentredString(label_x, label_y, code_value)
         c.restoreState()
     else:
         c.saveState()
@@ -305,7 +312,7 @@ def _render_voucher_on_pdf(
         c.setFont("Courier-Bold", cb.font_size_pt)
         label_x = cb_x + (cb_w / 2.0)
         label_y = -(cb_y + (cb_h / 2.0) - (cb.font_size_pt * 0.3))
-        c.drawCentredString(label_x, label_y, code)
+        c.drawCentredString(label_x, label_y, code_value)
         c.restoreState()
 
     c.restoreState()
@@ -334,7 +341,6 @@ def render_bundle_pdf(
 
         for item in page.items:
             voucher = vouchers_map.get(item.item_id)
-            code_value = voucher.code if voucher else item.item_id
             template_id = voucher.template_id if voucher else "default"
 
             template = templates_map.get(template_id)
@@ -345,7 +351,7 @@ def render_bundle_pdf(
                 pdf_canvas,
                 item=item,
                 template=template,
-                code=code_value,
+                voucher=voucher,
                 assets_dir=assets_dir_path,
             )
 

@@ -154,3 +154,52 @@ def test_bundle_allocation_exceeds_entropy_limit() -> None:
             validity_months=12,
             target_date=date(2026, 5, 1),
         )
+
+def test_campaign_bundle_generation() -> None:
+    variants = [
+        ("DINNER FOR TWO", "Includes starter & main", 3),
+        ("MASSAGE SESSION", "60 minutes relax", 2),
+        ("SPA PASS", "Full day access", 1),
+    ]
+    bundle = CodeEngine.generate_campaign_bundle(
+        bundle_id="b_campaign_test",
+        bundle_name="Campaign Test",
+        template_id="tmpl_dinner_voucher",
+        variants=variants,
+        prefix="CMP",
+    )
+
+    assert bundle.id == "b_campaign_test"
+    assert len(bundle.vouchers) == 6
+
+    titles = [v.text_overrides.get("tb_title") for v in bundle.vouchers]
+    assert titles == [
+        "DINNER FOR TWO",
+        "DINNER FOR TWO",
+        "DINNER FOR TWO",
+        "MASSAGE SESSION",
+        "MASSAGE SESSION",
+        "SPA PASS",
+    ]
+
+    subs = [v.text_overrides.get("tb_sub") for v in bundle.vouchers]
+    assert subs == [
+        "Includes starter & main",
+        "Includes starter & main",
+        "Includes starter & main",
+        "60 minutes relax",
+        "60 minutes relax",
+        "Full day access",
+    ]
+
+
+def test_campaign_bundle_overflow_raises_error() -> None:
+    variants = [("ITEM A", "Desc A", 20), ("ITEM B", "Desc B", 12)]
+    with pytest.raises(ValueError, match="Max amount of vouchers per bundle is 31"):
+        CodeEngine.generate_campaign_bundle(
+            bundle_id="b_overflow",
+            bundle_name="Overflow",
+            template_id="tmpl_main",
+            variants=variants,
+            prefix="CMP",
+        )

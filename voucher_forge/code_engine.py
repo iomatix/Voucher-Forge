@@ -252,3 +252,69 @@ class CodeEngine:
             created_at=created_at_iso,
             vouchers=vouchers,
         )
+
+
+    @classmethod
+    def generate_campaign_bundle(
+        cls,
+        bundle_id: str,
+        bundle_name: str,
+        template_id: str,
+        variants: list[tuple[str, str, int]],
+        prefix: str,
+        validity_months: int = 99,
+        target_date: date | None = None,
+    ) -> BundleRegistry:
+        """Generates a bundle with multiple content variants (title + subtitle) sharing a base template."""
+        total_count = sum(count for _, _, count in variants)
+        if total_count < 1:
+            raise ValueError("Amount of vouchers must be at least 1.")
+        if total_count > len(ALPHABET):  # 31
+            raise ValueError(
+                f"Max amount of vouchers per bundle is {len(ALPHABET)}."
+            )
+
+        clean_prefix = cls._normalize_prefix(prefix)
+        cls._format_validity(validity_months)
+        date_effective = target_date if target_date is not None else date.today()
+        ts_part = cls._encode_timestamp(date_effective)
+        val_part = cls._format_validity(validity_months)
+
+        created_at_iso = datetime.now(timezone.utc).isoformat()
+        vouchers: list[VoucherItem] = []
+
+        available_entropy = list(ALPHABET)
+        secrets.SystemRandom().shuffle(available_entropy)
+
+        voucher_idx = 0
+        for variant_title, variant_sub, count in variants:
+            for _ in range(count):
+                ent_ch = available_entropy[voucher_idx]
+                payload = f"{clean_prefix}{ts_part}{val_part}{ent_ch}"
+                chk = compute_luhn_mod31_check_digit(payload)
+                key = f"{clean_prefix}-{ts_part}-{val_part}-{ent_ch}{chk}"
+
+                overrides: dict[str, str] = {}
+                if variant_title:
+                    overrides["tb_title"] = variant_title
+                if variant_sub:
+                    overrides["tb_sub"] = variant_sub
+
+                vouchers.append(
+                    VoucherItem(
+                        code=key,
+                        template_id=template_id,
+                        status=VoucherStatus.ACTIVE,
+                        created_at=created_at_iso,
+                        text_overrides=overrides,
+                    )
+                )
+                voucher_idx += 1
+
+        return BundleRegistry(
+            id=bundle_id,
+            name=bundle_name,
+            code_prefix=clean_prefix,
+            created_at=created_at_iso,
+            vouchers=vouchers,
+        )

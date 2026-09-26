@@ -71,10 +71,19 @@ def test_render_voucher_svg(sample_template: TemplateConfig) -> None:
     assert "<linearGradient" in svg_output
 
 
+def test_render_voucher_svg_with_text_overrides(sample_template: TemplateConfig) -> None:
+    svg_output = render_voucher_svg(
+        sample_template,
+        sample_code="VIP-25W-12-8K",
+        text_overrides={"tb1": "CUSTOM SPA OFFER"},
+    )
+    assert "CUSTOM SPA OFFER" in svg_output
+    assert "VIP ACCESS PASS" not in svg_output
+
+
 def test_render_bundle_pdf_generation(
     tmp_path: Path, sample_template: TemplateConfig
 ) -> None:
-    # 4 items arranged via packer
     items_to_pack = [
         ("v_01", sample_template.width_mm, sample_template.height_mm),
         ("v_02", sample_template.width_mm, sample_template.height_mm),
@@ -91,6 +100,7 @@ def test_render_bundle_pdf_generation(
             template_id=sample_template.id,
             status=VoucherStatus.ACTIVE,
             created_at="2026-03-01T12:00:00Z",
+            text_overrides={"tb1": f"VARIANT {i}"},
         )
         for i in range(1, 5)
     }
@@ -117,7 +127,6 @@ def test_render_bundle_pdf_generation(
 
 
 def test_render_rotated_voucher_in_pdf(tmp_path: Path) -> None:
-    # Template that fits on A4 only when rotated 90 degrees: 280 x 80 mm
     wide_template = TemplateConfig(
         id="tmpl_wide",
         name="Wide Banner Voucher",
@@ -149,7 +158,6 @@ def test_render_rotated_voucher_in_pdf(tmp_path: Path) -> None:
     items = [("v_wide_1", 280.0, 80.0)]
     packing_result = pack_vouchers(items, margin_mm=8.0, spacing_mm=4.0)
 
-    # Must be packed rotated
     assert packing_result.pages[0].items[0].is_rotated is True
 
     templates_map = {wide_template.id: wide_template}

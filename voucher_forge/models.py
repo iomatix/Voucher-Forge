@@ -181,6 +181,7 @@ class VoucherItem:
     status: VoucherStatus
     created_at: str
     redeemed_at: str | None = None
+    text_overrides: dict[str, str] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -189,6 +190,7 @@ class VoucherItem:
             "status": self.status.value,
             "created_at": self.created_at,
             "redeemed_at": self.redeemed_at,
+            "text_overrides": self.text_overrides,
         }
 
     @classmethod
@@ -199,6 +201,7 @@ class VoucherItem:
             status=VoucherStatus(data["status"]),
             created_at=str(data["created_at"]),
             redeemed_at=data.get("redeemed_at"),
+            text_overrides=data.get("text_overrides", {}),
         )
 
 
