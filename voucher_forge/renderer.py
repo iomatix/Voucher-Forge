@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from reportlab.graphics.barcode.code128 import Code128
-from reportlab.lib.colors import HexColor, gray
+from reportlab.lib.colors import Color, HexColor, gray
 from reportlab.lib.units import mm as MM_TO_PT
 from reportlab.pdfgen import canvas
 
@@ -35,6 +35,13 @@ def _hex_to_rgb(hex_code: str) -> tuple[float, float, float]:
     g = int(clean[2:4], 16) / 255.0
     b = int(clean[4:6], 16) / 255.0
     return r, g, b
+
+
+def _get_contrast_stroke(hex_code: str) -> str:
+    """Returns dark stroke for light text, light stroke for dark text."""
+    r, g, b = _hex_to_rgb(hex_code)
+    luminance = 0.299 * r + 0.587 * g + 0.114 * b
+    return "#0F172A" if luminance > 0.45 else "#FFFFFF"
 
 
 def _encode_image_to_base64_uri(image_path: Path) -> str | None:
@@ -95,7 +102,7 @@ def render_voucher_svg(
             f'<rect width="{w_mm}" height="{h_mm}" fill="{html.escape(bg.color_start)}" />'
         )
 
-    # 2. Logo layer (render only if file actually exists on disk)
+    # 2. Logo layer
     if template.logo and assets_dir:
         l_path = assets_dir / template.logo.asset_filename
         uri = _encode_image_to_base64_uri(l_path)
@@ -105,16 +112,20 @@ def render_voucher_svg(
                 f'width="{template.logo.width_mm}" height="{template.logo.height_mm}" preserveAspectRatio="xMidYMid meet" />'
             )
 
-    # 3. Text blocks layer (supports dynamic text overrides)
+    # 3. Text blocks layer with clean vector stroke
     overrides = text_overrides or {}
     for tb in template.text_blocks:
         display_text = overrides.get(tb.id, tb.text)
         font_size_units = round(tb.font_size_pt * 0.352778, 3)
         escaped_text = html.escape(display_text)
+        stroke_color = _get_contrast_stroke(tb.color_hex)
+        stroke_w = round(font_size_units * 0.12, 3)
+
         svg_elements.append(
             f'<text x="{tb.x_mm}" y="{tb.y_mm}" font-family="{html.escape(tb.font_family)}, sans-serif" '
             f'font-size="{font_size_units}" font-weight="bold" fill="{html.escape(tb.color_hex)}" '
-            f'dominant-baseline="hanging">{escaped_text}</text>'
+            f'stroke="{stroke_color}" stroke-width="{stroke_w}" stroke-linejoin="round" '
+            f'style="paint-order: stroke fill;" dominant-baseline="hanging">{escaped_text}</text>'
         )
 
     # 4. Code Box layer
@@ -250,7 +261,7 @@ def _render_voucher_on_pdf(
             c.drawImage(str(l_path), 0, -lh_pt, width=lw_pt, height=lh_pt, mask="auto")
             c.restoreState()
 
-    # 3. Text Blocks (supports dynamic text overrides)
+    # 3. Text Blocks (Stroke + Fill for readability)
     overrides = voucher.text_overrides if voucher else {}
     for tb in template.text_blocks:
         c.saveState()
@@ -259,13 +270,26 @@ def _render_voucher_on_pdf(
         ty_pt = tb.y_mm * MM_TO_PT
         c.translate(tx_pt, ty_pt)
         c.scale(1, -1)
-        r, g, b = _hex_to_rgb(tb.color_hex)
-        c.setFillColorRGB(r, g, b)
+
+        fill_r, fill_g, fill_b = _hex_to_rgb(tb.color_hex)
+        stroke_hex = _get_contrast_stroke(tb.color_hex)
+        strk_r, strk_g, strk_b = _hex_to_rgb(stroke_hex)
+
         c.setFont("Helvetica-Bold", tb.font_size_pt)
-        c.drawString(0, -tb.font_size_pt * 0.8, display_text)
+        
+        # Stroke layer
+        c.setStrokeColorRGB(strk_r, strk_g, strk_b)
+        c.setFillColorRGB(fill_r, fill_g, fill_b)
+        c.setLineWidth(max(0.6, tb.font_size_pt * 0.08))
+
+        text_obj = c.beginText(0, -tb.font_size_pt * 0.8)
+        text_obj.setTextRenderMode(2)  # 2 = Fill then stroke text
+        text_obj.textLine(display_text)
+        c.drawText(text_obj)
+
         c.restoreState()
 
-    # 4. Code Box & Barcode (Background must precede barcode drawing)
+    # 4. Code Box & Barcode
     cb = template.code_box
     cb_x = cb.x_mm * MM_TO_PT
     cb_y = cb.y_mm * MM_TO_PT

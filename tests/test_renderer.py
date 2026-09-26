@@ -81,6 +81,12 @@ def test_render_voucher_svg_with_text_overrides(sample_template: TemplateConfig)
     assert "VIP ACCESS PASS" not in svg_output
 
 
+def test_render_voucher_svg_with_stroke_contrast(sample_template: TemplateConfig) -> None:
+    svg_output = render_voucher_svg(sample_template, sample_code="VIP-25W-12-8K")
+    assert 'paint-order: stroke fill;' in svg_output
+    assert 'stroke=' in svg_output
+
+
 def test_render_bundle_pdf_generation(
     tmp_path: Path, sample_template: TemplateConfig
 ) -> None:
