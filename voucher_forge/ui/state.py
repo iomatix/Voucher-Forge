@@ -15,7 +15,7 @@ class AppState:
     def __init__(self, storage: StorageRepository) -> None:
         self.storage = storage
         self.locales: dict[str, dict[str, str]] = self._load_locales()
-        self.current_lang: str = "pl"
+        self.current_lang: str = "en"
 
         templates = self.storage.list_templates()
         self.active_template: TemplateConfig = templates[0]

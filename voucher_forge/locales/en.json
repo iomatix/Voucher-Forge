@@ -54,5 +54,10 @@
   "none_option": "None",
   "save_as_new": "Save As New Template",
   "template_created": "Created new template: {name}.",
-  "text_color": "Text Color"
+  "text_color": "Text Color",
+  "code_box_header": "Barcode Box Geometry",
+  "pos_x_mm": "Position X (mm)",
+  "pos_y_mm": "Position Y (mm)",
+  "box_width_mm": "Box Width (mm)",
+  "box_height_mm": "Box Height (mm)"
 }

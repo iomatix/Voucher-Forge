@@ -170,8 +170,16 @@ class TemplateStudioView:
                 )
 
                 # Text Configuration
-                tb_h = self.state.active_template.text_blocks[0] if len(self.state.active_template.text_blocks) > 0 else None
-                tb_s = self.state.active_template.text_blocks[1] if len(self.state.active_template.text_blocks) > 1 else None
+                tb_h = (
+                    self.state.active_template.text_blocks[0]
+                    if len(self.state.active_template.text_blocks) > 0
+                    else None
+                )
+                tb_s = (
+                    self.state.active_template.text_blocks[1]
+                    if len(self.state.active_template.text_blocks) > 1
+                    else None
+                )
 
                 t1_val = tb_h.text if tb_h else ""
                 t1_col = tb_h.color_hex if tb_h else "#FFFFFF"
@@ -189,7 +197,9 @@ class TemplateStudioView:
                     self.header_color_input = ui.input(
                         label=self.state.t("text_color"),
                         value=t1_col,
-                        on_change=lambda e: self._update_text_block(0, "color_hex", e.value),
+                        on_change=lambda e: self._update_text_block(
+                            0, "color_hex", e.value
+                        ),
                     ).classes("w-32")
                     ui.color_picker(
                         on_pick=lambda e: self._update_text_block(0, "color_hex", e.color)
@@ -206,17 +216,72 @@ class TemplateStudioView:
                     self.sub_color_input = ui.input(
                         label=self.state.t("text_color"),
                         value=t2_col,
-                        on_change=lambda e: self._update_text_block(1, "color_hex", e.value),
+                        on_change=lambda e: self._update_text_block(
+                            1, "color_hex", e.value
+                        ),
                     ).classes("w-32")
                     ui.color_picker(
                         on_pick=lambda e: self._update_text_block(1, "color_hex", e.color)
                     )
 
-                self.barcode_checkbox = ui.checkbox(
-                    self.state.t("show_barcode"),
-                    value=self.state.active_template.code_box.show_barcode,
-                    on_change=lambda e: self._update_active_and_refresh("show_barcode", e.value),
-                ).classes("my-2")
+                # Barcode / Code Box Geometry Section
+                with ui.expansion(
+                    self.state.t("code_box_header"), icon="qr_code"
+                ).classes("w-full bg-slate-50 border border-slate-200 rounded my-2"):
+                    with ui.column().classes("w-full p-2 gap-2"):
+                        self.barcode_checkbox = ui.checkbox(
+                            self.state.t("show_barcode"),
+                            value=self.state.active_template.code_box.show_barcode,
+                            on_change=lambda e: self._update_active_and_refresh(
+                                "show_barcode", e.value
+                            ),
+                        )
+
+                        with ui.row().classes("w-full gap-2"):
+                            self.cb_x_input = ui.number(
+                                label=self.state.t("pos_x_mm"),
+                                value=self.state.active_template.code_box.x_mm,
+                                format="%.1f",
+                                min=0.0,
+                                step=1.0,
+                                on_change=lambda e: self._update_active_and_refresh(
+                                    "cb_x", e.value
+                                ),
+                            ).classes("flex-1")
+
+                            self.cb_y_input = ui.number(
+                                label=self.state.t("pos_y_mm"),
+                                value=self.state.active_template.code_box.y_mm,
+                                format="%.1f",
+                                min=0.0,
+                                step=1.0,
+                                on_change=lambda e: self._update_active_and_refresh(
+                                    "cb_y", e.value
+                                ),
+                            ).classes("flex-1")
+
+                        with ui.row().classes("w-full gap-2"):
+                            self.cb_w_input = ui.number(
+                                label=self.state.t("box_width_mm"),
+                                value=self.state.active_template.code_box.width_mm,
+                                format="%.1f",
+                                min=20.0,
+                                step=1.0,
+                                on_change=lambda e: self._update_active_and_refresh(
+                                    "cb_w", e.value
+                                ),
+                            ).classes("flex-1")
+
+                            self.cb_h_input = ui.number(
+                                label=self.state.t("box_height_mm"),
+                                value=self.state.active_template.code_box.height_mm,
+                                format="%.1f",
+                                min=10.0,
+                                step=1.0,
+                                on_change=lambda e: self._update_active_and_refresh(
+                                    "cb_h", e.value
+                                ),
+                            ).classes("flex-1")
 
                 # Asset Upload Section
                 ui.label(self.state.t("upload_asset")).classes(
@@ -298,13 +363,11 @@ class TemplateStudioView:
                 height_mm=24.0,
             )
             self.logo_asset_select.value = first_asset
-            # Offset text to the right of logo
             text_x = 10.0 + 24.0 + 6.0
             for tb in tmpl.text_blocks:
                 tb.x_mm = text_x
         else:
             tmpl.logo = None
-            # Reset text back to standard margin
             for tb in tmpl.text_blocks:
                 tb.x_mm = 10.0
 
@@ -326,18 +389,18 @@ class TemplateStudioView:
             tmpl.width_mm = new_w
             cb = tmpl.code_box
             if cb.width_mm > new_w - 10.0:
-                cb.width_mm = max(30.0, new_w - 10.0)
+                cb.width_mm = max(20.0, new_w - 10.0)
             if cb.x_mm + cb.width_mm > new_w - 4.0:
-                cb.x_mm = max(4.0, new_w - cb.width_mm - 6.0)
+                cb.x_mm = max(2.0, new_w - cb.width_mm - 4.0)
 
         elif field_name == "height_mm":
             new_h = max(30.0, float(value or 30.0))
             tmpl.height_mm = new_h
             cb = tmpl.code_box
-            if cb.height_mm > new_h * 0.45:
-                cb.height_mm = max(14.0, new_h * 0.35)
+            if cb.height_mm > new_h * 0.5:
+                cb.height_mm = max(10.0, new_h * 0.35)
             if cb.y_mm + cb.height_mm > new_h - 4.0:
-                cb.y_mm = max(6.0, new_h - cb.height_mm - 6.0)
+                cb.y_mm = max(2.0, new_h - cb.height_mm - 4.0)
 
         elif field_name == "bg_type":
             tmpl.background.type = str(value)
@@ -353,12 +416,22 @@ class TemplateStudioView:
             tmpl.background.gradient_angle_deg = float(value or 0.0)
         elif field_name == "show_barcode":
             tmpl.code_box.show_barcode = bool(value)
+        elif field_name == "cb_x":
+            tmpl.code_box.x_mm = max(0.0, float(value or 0.0))
+        elif field_name == "cb_y":
+            tmpl.code_box.y_mm = max(0.0, float(value or 0.0))
+        elif field_name == "cb_w":
+            tmpl.code_box.width_mm = max(20.0, float(value or 20.0))
+        elif field_name == "cb_h":
+            tmpl.code_box.height_mm = max(10.0, float(value or 10.0))
 
         self._refresh_preview()
 
     def _update_text_block(self, index: int, field_name: str, value: Any) -> None:
         if index < len(self.state.active_template.text_blocks):
-            setattr(self.state.active_template.text_blocks[index], field_name, str(value))
+            setattr(
+                self.state.active_template.text_blocks[index], field_name, str(value)
+            )
             if field_name == "color_hex":
                 if index == 0:
                     self.header_color_input.value = str(value)
@@ -392,7 +465,13 @@ class TemplateStudioView:
         self.color_start_input.value = tmpl.background.color_start
         self.color_end_input.value = tmpl.background.color_end or "#1E293B"
         self.grad_angle_input.value = tmpl.background.gradient_angle_deg
-        self.barcode_checkbox.value = tmpl.code_box.show_barcode
+
+        cb = tmpl.code_box
+        self.barcode_checkbox.value = cb.show_barcode
+        self.cb_x_input.value = cb.x_mm
+        self.cb_y_input.value = cb.y_mm
+        self.cb_w_input.value = cb.width_mm
+        self.cb_h_input.value = cb.height_mm
 
         available_assets = self._get_available_assets()
         options = [""] + available_assets
@@ -458,6 +537,10 @@ class TemplateStudioView:
         self.sub_text_input.props(f'label="{self.state.t("sub_text")}"')
         self.sub_color_input.props(f'label="{self.state.t("text_color")}"')
         self.barcode_checkbox.text = self.state.t("show_barcode")
+        self.cb_x_input.props(f'label="{self.state.t("pos_x_mm")}"')
+        self.cb_y_input.props(f'label="{self.state.t("pos_y_mm")}"')
+        self.cb_w_input.props(f'label="{self.state.t("box_width_mm")}"')
+        self.cb_h_input.props(f'label="{self.state.t("box_height_mm")}"')
         self.save_btn.text = self.state.t("save_template")
         self.save_as_new_btn.text = self.state.t("save_as_new")
         self.asset_select.props(f'label="{self.state.t("select_image_asset")}"')

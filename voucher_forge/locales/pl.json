@@ -54,5 +54,10 @@
   "none_option": "Brak",
   "save_as_new": "Zapisz Jako Nowy Szablon",
   "template_created": "Utworzono nowy szablon: {name}.",
-  "text_color": "Kolor Tekstu"
+  "text_color": "Kolor Tekstu",
+  "code_box_header": "Pozycja i Wymiary Kodu",
+  "pos_x_mm": "Pozycja X (mm)",
+  "pos_y_mm": "Pozycja Y (mm)",
+  "box_width_mm": "Szerokość Kodu (mm)",
+  "box_height_mm": "Wysokość Kodu (mm)"
 }
