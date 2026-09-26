@@ -27,7 +27,7 @@
   "generate_and_export": "Generuj i Eksportuj PDF",
   "bundle_success": "Paczka wygenerowana: {count} kuponów. Pobieranie pliku PDF...",
   "scanner_header": "Weryfikacja i Realizacja Kuponów",
-  "enter_code": "Wprowadź Kod CD-Key",
+  "enter_code": "Wprowadź Kod",
   "verify_btn": "Weryfikuj i Dekoduj",
   "redeem_btn": "Zrealizuj Kupon",
   "status": "Status",

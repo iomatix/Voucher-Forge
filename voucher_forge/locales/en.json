@@ -27,7 +27,7 @@
   "generate_and_export": "Generate & Export PDF",
   "bundle_success": "Bundle generated: {count} vouchers. Downloading PDF...",
   "scanner_header": "Voucher Verification & Redemption",
-  "enter_code": "Enter Voucher CD-Key",
+  "enter_code": "Enter Voucher Key",
   "verify_btn": "Verify & Decode",
   "redeem_btn": "Redeem Voucher",
   "status": "Status",

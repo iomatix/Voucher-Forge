@@ -146,9 +146,29 @@ class TemplateStudioView:
         if field_name == "name":
             tmpl.name = str(value)
         elif field_name == "width_mm":
-            tmpl.width_mm = max(10.0, float(value))
+            new_w = max(40.0, float(value or 40.0))
+            tmpl.width_mm = new_w
+            # Auto-fit code_box to boundary width
+            cb = tmpl.code_box
+            if cb.width_mm > new_w - 10.0:
+                cb.width_mm = max(30.0, new_w - 10.0)
+            if cb.x_mm + cb.width_mm > new_w - 4.0:
+                cb.x_mm = max(4.0, new_w - cb.width_mm - 6.0)
+            # Auto-fit text block margins to boundary width
+            for tb in tmpl.text_blocks:
+                if tb.x_mm > new_w * 0.4:
+                    tb.x_mm = max(8.0, new_w * 0.1)
+
         elif field_name == "height_mm":
-            tmpl.height_mm = max(10.0, float(value))
+            new_h = max(30.0, float(value or 30.0))
+            tmpl.height_mm = new_h
+            # Auto-fit code_box to boundary height
+            cb = tmpl.code_box
+            if cb.height_mm > new_h * 0.45:
+                cb.height_mm = max(14.0, new_h * 0.35)
+            if cb.y_mm + cb.height_mm > new_h - 4.0:
+                cb.y_mm = max(6.0, new_h - cb.height_mm - 6.0)
+
         elif field_name == "bg_type":
             tmpl.background.type = str(value)
         elif field_name == "color_start":
@@ -156,7 +176,7 @@ class TemplateStudioView:
         elif field_name == "color_end":
             tmpl.background.color_end = str(value)
         elif field_name == "gradient_angle_deg":
-            tmpl.background.gradient_angle_deg = float(value)
+            tmpl.background.gradient_angle_deg = float(value or 0.0)
         elif field_name == "show_barcode":
             tmpl.code_box.show_barcode = bool(value)
 
