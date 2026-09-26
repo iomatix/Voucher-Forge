@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from nicegui import run, ui
 
 from voucher_forge.code_engine import CodeEngine
+from voucher_forge.models import CampaignPreset, VariantPreset
 from voucher_forge.packer import pack_vouchers
 from voucher_forge.renderer import render_bundle_pdf, render_voucher_svg
 from voucher_forge.ui.state import AppState
@@ -45,6 +47,13 @@ class BatchForgeView:
             if f.is_file() and f.suffix.lower() in valid_exts
         ]
 
+    def _get_preset_options(self) -> dict[str, str]:
+        presets = self.state.storage.list_presets()
+        options = {"": self.state.t("preset_empty_option")}
+        for p in presets:
+            options[p.id] = f"{p.name} ({p.id})"
+        return options
+
     def render(self) -> None:
         templates = self.state.storage.list_templates()
         template_options = {t.id: t.name for t in templates}
@@ -53,8 +62,31 @@ class BatchForgeView:
             "w-full max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-sm border border-slate-200"
         ):
             self.header_lbl = ui.label(self.state.t("forge_header")).classes(
-                "text-xl font-bold text-slate-800 mb-4"
+                "text-xl font-bold text-slate-800 mb-2"
             )
+
+            # --- Preset Management Toolbar ---
+            with ui.row().classes(
+                "w-full items-center gap-3 p-3 mb-4 bg-slate-50 border border-slate-200 rounded"
+            ):
+                self.preset_select = ui.select(
+                    options=self._get_preset_options(),
+                    value="",
+                    label=self.state.t("load_preset"),
+                    on_change=lambda e: self._on_preset_selected(str(e.value or "")),
+                ).classes("flex-1 text-sm")
+
+                self.save_preset_btn = ui.button(
+                    self.state.t("save_preset"),
+                    icon="save",
+                    on_click=self._save_current_preset,
+                ).classes("bg-sky-600 text-white text-xs py-2 px-3")
+
+                self.save_as_new_preset_btn = ui.button(
+                    self.state.t("save_as_new_preset"),
+                    icon="add_circle",
+                    on_click=self._save_as_new_preset,
+                ).classes("bg-slate-700 text-white text-xs py-2 px-3")
 
             self.template_select = ui.select(
                 options=template_options,
@@ -113,7 +145,7 @@ class BatchForgeView:
             ).classes("w-full bg-emerald-600 text-white py-3 font-semibold mt-4")
 
         self.state.register_lang_listener(self._update_labels)
-    
+
     def _render_variant_svg(self, row: VariantRow) -> str:
         tmpl = self.state.storage.load_template(self.template_select.value)
         overrides = {}
@@ -122,7 +154,6 @@ class BatchForgeView:
         if len(tmpl.text_blocks) > 1:
             overrides[tmpl.text_blocks[1].id] = row.sub_text
 
-        # Obsługa jawnego zdjęcia grafiki (__NONE__) lub pozostawienia domyślnej
         bg_override = "__NONE__" if row.bg_asset == "none" else (row.bg_asset or None)
         logo_override = "__NONE__" if row.logo_asset == "none" else (row.logo_asset or None)
 
@@ -135,7 +166,6 @@ class BatchForgeView:
             logo_asset_override=logo_override,
             bg_color_override=row.bg_color,
         )
-
 
     def _render_variants_table(self) -> None:
         self.variants_container.clear()
@@ -154,7 +184,6 @@ class BatchForgeView:
                     ui.card().classes("w-full p-4 bg-slate-50 border border-slate-200"),
                     ui.row().classes("w-full items-start gap-4"),
                 ):
-                    # Mini preview SVG container
                     preview_box = ui.html(
                         self._render_variant_svg(row)
                     ).classes(
@@ -162,7 +191,6 @@ class BatchForgeView:
                     )
                     self.preview_containers[idx] = preview_box
 
-                    # Inputs Column
                     with ui.column().classes("flex-1 gap-2"):
                         with ui.row().classes("w-full items-center gap-3"):
                             ui.input(
@@ -198,7 +226,6 @@ class BatchForgeView:
                             ),
                         ).classes("w-full text-sm")
 
-                        # Per-variant asset & color selectors
                         with ui.row().classes("w-full gap-2 mt-1 items-center"):
                             ui.select(
                                 options=asset_options,
@@ -265,6 +292,86 @@ class BatchForgeView:
         self._update_summary()
         self._render_variants_table()
 
+    def _on_preset_selected(self, preset_id: str) -> None:
+        if not preset_id:
+            return
+        try:
+            preset = self.state.storage.load_preset(preset_id)
+            self.b_id.value = preset.id
+            self.b_name.value = preset.name
+            self.b_prefix.value = preset.prefix
+            self.b_validity.value = preset.validity_months
+            if preset.template_id in self.template_select.options:
+                self.template_select.value = preset.template_id
+
+            self.variants = [
+                VariantRow(
+                    title=v.title,
+                    sub_text=v.sub_text,
+                    count=v.count,
+                    bg_asset=v.bg_asset,
+                    logo_asset=v.logo_asset,
+                    bg_color=v.bg_color,
+                )
+                for v in preset.variants
+            ]
+            self._update_summary()
+            self._render_variants_table()
+            ui.notify(
+                self.state.t("preset_loaded").format(name=preset.name),
+                type="positive",
+            )
+        except Exception as exc:
+            ui.notify(f"Error loading preset: {exc}", type="negative")
+
+    def _save_current_preset(self) -> None:
+        pid = str(self.b_id.value or "").strip()
+        if not pid:
+            ui.notify(self.state.t("preset_enter_id"), type="warning")
+            return
+
+        preset = CampaignPreset(
+            id=pid,
+            name=str(self.b_name.value or "").strip() or pid,
+            template_id=str(self.template_select.value),
+            prefix=str(self.b_prefix.value or "OFF").strip(),
+            validity_months=int(self.b_validity.value or 12),
+            variants=[
+                VariantPreset(
+                    title=r.title,
+                    sub_text=r.sub_text,
+                    count=r.count,
+                    bg_asset=r.bg_asset,
+                    logo_asset=r.logo_asset,
+                    bg_color=r.bg_color,
+                )
+                for r in self.variants
+            ],
+        )
+        self.state.storage.save_preset(preset)
+        self.preset_select.options = self._get_preset_options()
+        self.preset_select.value = preset.id
+        self.preset_select.update()
+        ui.notify(
+            self.state.t("preset_saved").format(name=preset.name),
+            type="positive",
+        )
+
+    def _save_as_new_preset(self) -> None:
+        p_name = str(self.b_name.value or "").strip() or "Custom Campaign"
+        base_slug = re.sub(r"[^a-zA-Z0-9_]+", "_", p_name.lower()).strip("_")
+        candidate_id = f"preset_{base_slug}" if base_slug else "preset_custom"
+
+        existing_ids = {p.id for p in self.state.storage.list_presets()}
+        counter = 1
+        final_id = candidate_id
+        while final_id in existing_ids:
+            final_id = f"{candidate_id}_{counter}"
+            counter += 1
+
+        self.b_id.value = final_id
+        self._save_current_preset()
+
     def _update_summary(self) -> None:
         total = sum(r.count for r in self.variants)
         tmpl = self.state.storage.load_template(self.template_select.value)
@@ -288,6 +395,13 @@ class BatchForgeView:
 
     def _update_labels(self) -> None:
         self.header_lbl.text = self.state.t("forge_header")
+        self.preset_select.props(f'label="{self.state.t("load_preset")}"')
+        self.preset_select.options = self._get_preset_options()
+        self.preset_select.update()
+
+        self.save_preset_btn.text = self.state.t("save_preset")
+        self.save_as_new_preset_btn.text = self.state.t("save_as_new_preset")
+
         self.template_select.props(f'label="{self.state.t("select_template")}"')
         self.b_id.props(f'label="{self.state.t("bundle_id")}"')
         self.b_name.props(f'label="{self.state.t("bundle_name")}"')
@@ -301,7 +415,14 @@ class BatchForgeView:
     async def _handle_generation(self) -> None:
         try:
             variant_tuples = [
-                (r.title.strip(), r.sub_text.strip(), r.count, r.bg_asset, r.logo_asset, r.bg_color)
+                (
+                    r.title.strip(),
+                    r.sub_text.strip(),
+                    r.count,
+                    r.bg_asset,
+                    r.logo_asset,
+                    r.bg_color,
+                )
                 for r in self.variants
                 if r.title.strip()
             ]

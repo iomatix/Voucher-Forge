@@ -1,4 +1,4 @@
-"""Atomic storage repository for templates and voucher bundles.
+"""Atomic storage repository for templates, presets, and voucher bundles.
 
 Strict zero-UI layer handling directory scaffolding and atomic persistence.
 """
@@ -14,6 +14,7 @@ from typing import Any
 
 from voucher_forge.models import (
     BundleRegistry,
+    CampaignPreset,
     TemplateConfig,
     VoucherStatus,
 )
@@ -33,6 +34,14 @@ class BundleNotFoundError(FileNotFoundError):
     def __init__(self, bundle_id: str) -> None:
         super().__init__(f"Bundle with ID '{bundle_id}' was not found.")
         self.bundle_id = bundle_id
+
+
+class PresetNotFoundError(FileNotFoundError):
+    """Raised when requested preset ID is not found on disk."""
+
+    def __init__(self, preset_id: str) -> None:
+        super().__init__(f"Campaign preset with ID '{preset_id}' was not found.")
+        self.preset_id = preset_id
 
 
 class StorageRepository:
@@ -74,6 +83,7 @@ class StorageRepository:
                     pass
             raise
 
+    # --- Szablony (Templates) ---
     def save_template(self, template: TemplateConfig) -> Path:
         target_path = self.templates_dir / f"{template.id}.json"
         self._write_atomic_json(target_path, template.to_dict())
@@ -99,6 +109,39 @@ class StorageRepository:
             results.append(TemplateConfig.from_dict(data))
         return results
 
+    # --- Presety Kampanii (Campaign Presets) ---
+    def save_preset(self, preset: CampaignPreset) -> Path:
+        target_path = self.presets_dir / f"{preset.id}.json"
+        self._write_atomic_json(target_path, preset.to_dict())
+        return target_path
+
+    def load_preset(self, preset_id: str) -> CampaignPreset:
+        file_path = self.presets_dir / f"{preset_id}.json"
+        if not file_path.is_file():
+            raise PresetNotFoundError(preset_id)
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+
+        return CampaignPreset.from_dict(data)
+
+    def list_presets(self) -> list[CampaignPreset]:
+        results: list[CampaignPreset] = []
+        if not self.presets_dir.exists():
+            return results
+
+        for file_path in sorted(self.presets_dir.glob("*.json")):
+            if file_path.name.startswith(".tmp_"):
+                continue
+            try:
+                with open(file_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                results.append(CampaignPreset.from_dict(data))
+            except Exception:
+                continue
+        return results
+
+    # --- Paczki (Bundles) ---
     def save_bundle(self, bundle: BundleRegistry) -> Path:
         target_path = self.bundles_dir / f"{bundle.id}.json"
         self._write_atomic_json(target_path, bundle.to_dict())

@@ -65,5 +65,12 @@
   "variant_bg_asset": "Grafika Tła",
   "variant_logo_asset": "Logo / Sticker",
   "variant_bg_color": "Kolor Bazowy",
-  "variant_color_default": "Domyślny"
+  "variant_color_default": "Domyślny",
+  "load_preset": "Wczytaj Preset Kampanii",
+  "save_preset": "Zapisz Preset",
+  "save_as_new_preset": "Zapisz jako nowy",
+  "preset_empty_option": "-- Nowy / Niezapisany draft --",
+  "preset_saved": "Zapisano preset '{name}'!",
+  "preset_loaded": "Preset '{name}' wczytany!",
+  "preset_enter_id": "Podaj ID kampanii / presetu!"
 }

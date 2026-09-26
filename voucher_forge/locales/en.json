@@ -65,5 +65,12 @@
   "variant_bg_asset": "Background Image",
   "variant_logo_asset": "Logo / Sticker",
   "variant_bg_color": "Base Color",
-  "variant_color_default": "Default"
+  "variant_color_default": "Default",
+  "load_preset": "Load Campaign Preset",
+  "save_preset": "Save Preset",
+  "save_as_new_preset": "Save As New",
+  "preset_empty_option": "-- New / Unsaved Draft --",
+  "preset_saved": "Preset '{name}' saved successfully!",
+  "preset_loaded": "Preset '{name}' loaded!",
+  "preset_enter_id": "Please enter Campaign / Preset ID!"
 }

@@ -10,6 +10,7 @@ import base64
 import html
 import math
 import mimetypes
+import uuid
 from pathlib import Path
 
 from reportlab.graphics.barcode.code128 import Code128
@@ -93,7 +94,9 @@ def render_voucher_svg(
         x2 = round(50 + 50 * math.cos(angle_rad), 2)
         y2 = round(50 + 50 * math.sin(angle_rad), 2)
 
-        grad_id = f"bg-grad-{template.id}"
+        # Unikalny identyfikator gradientu zapobiega konfliktom w drzewie DOM przeglądarki
+        render_uid = uuid.uuid4().hex[:8]
+        grad_id = f"bg-grad-{template.id}-{render_uid}"
         defs_elements.append(
             f'  <linearGradient id="{grad_id}" x1="{x1}%" y1="{y1}%" x2="{x2}%" y2="{y2}%">\n'
             f'    <stop offset="0%" stop-color="{html.escape(eff_color_start)}" />\n'
