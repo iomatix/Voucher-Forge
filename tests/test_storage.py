@@ -1,4 +1,4 @@
-"""Unit tests verifying StorageRepository and schema versioning contracts."""
+"""Unit tests verifying StorageRepository, atomic persistence, and schema contracts."""
 
 import json
 from pathlib import Path
@@ -10,16 +10,19 @@ from voucher_forge.models import (
     CURRENT_SCHEMA_VERSION,
     BackgroundConfig,
     BundleRegistry,
+    CampaignPreset,
     CodeBoxConfig,
     LogoConfig,
     SchemaVersionMismatchError,
     TemplateConfig,
     TextBlockConfig,
+    VariantPreset,
     VoucherItem,
     VoucherStatus,
 )
 from voucher_forge.storage import (
     BundleNotFoundError,
+    PresetNotFoundError,
     StorageRepository,
     TemplateNotFoundError,
 )
@@ -157,6 +160,61 @@ def test_load_bundle_not_found(temp_repo: StorageRepository) -> None:
     assert exc_info.value.bundle_id == "missing_bundle"
 
 
+def test_save_and_load_preset(temp_repo: StorageRepository) -> None:
+    preset = CampaignPreset(
+        id="preset_black_friday",
+        name="Black Friday Sale",
+        template_id="tmpl_001",
+        prefix="BLK",
+        validity_months=6,
+        variants=[
+            VariantPreset(
+                title="VIP PASS",
+                sub_text="All areas included",
+                count=5,
+                bg_asset="dark.png",
+                logo_asset="gold.png",
+                bg_color="#000000",
+            )
+        ],
+    )
+
+    saved_path = temp_repo.save_preset(preset)
+    assert saved_path.exists()
+    assert saved_path.name == "preset_black_friday.json"
+
+    loaded = temp_repo.load_preset("preset_black_friday")
+    assert loaded.id == "preset_black_friday"
+    assert loaded.name == "Black Friday Sale"
+    assert loaded.prefix == "BLK"
+    assert loaded.validity_months == 6
+    assert len(loaded.variants) == 1
+    assert loaded.variants[0].title == "VIP PASS"
+    assert loaded.variants[0].count == 5
+
+
+def test_load_preset_not_found(temp_repo: StorageRepository) -> None:
+    with pytest.raises(PresetNotFoundError) as exc_info:
+        temp_repo.load_preset("non_existent_preset")
+    assert exc_info.value.preset_id == "non_existent_preset"
+
+
+def test_list_presets_and_skip_corrupted(temp_repo: StorageRepository) -> None:
+    preset = CampaignPreset(
+        id="preset_active",
+        name="Active Preset",
+        template_id="tmpl_main",
+    )
+    temp_repo.save_preset(preset)
+
+    corrupted_file = temp_repo.presets_dir / "corrupted.json"
+    corrupted_file.write_text("{ broken json content", encoding="utf-8")
+
+    presets = temp_repo.list_presets()
+    assert len(presets) == 1
+    assert presets[0].id == "preset_active"
+
+
 def test_atomic_write_cleans_up_on_failure(temp_repo: StorageRepository) -> None:
     template = create_sample_template("crash_test")
 
@@ -222,6 +280,22 @@ def test_schema_version_missing_rejection(temp_repo: StorageRepository) -> None:
 
     assert exc_info.value.expected == CURRENT_SCHEMA_VERSION
     assert exc_info.value.actual is None
+
+
+def test_preset_schema_version_mismatch(temp_repo: StorageRepository) -> None:
+    payload = {
+        "schema_version": "0.0.1",
+        "id": "outdated_preset",
+        "name": "Outdated Preset",
+        "template_id": "tmpl_1",
+    }
+    target_file = temp_repo.presets_dir / "outdated_preset.json"
+    with open(target_file, "w", encoding="utf-8") as f:
+        json.dump(payload, f)
+
+    with pytest.raises(SchemaVersionMismatchError) as exc_info:
+        temp_repo.load_preset("outdated_preset")
+    assert exc_info.value.actual == "0.0.1"
 
 
 def test_update_voucher_status(temp_repo: StorageRepository) -> None:
