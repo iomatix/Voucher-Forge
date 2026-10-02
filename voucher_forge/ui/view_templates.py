@@ -492,7 +492,6 @@ class TemplateStudioView:
         available_assets = self._get_available_assets()
         options = [""] + available_assets
 
-        # Kemas kini medan aset latar belakang
         self.asset_select.options = options
         self.asset_select.value = tmpl.background.image_asset or ""
         self.asset_select.update()
@@ -500,9 +499,9 @@ class TemplateStudioView:
         self.grad_container.set_visibility(tmpl.background.type == "gradient")
         self.asset_select.set_visibility(tmpl.background.type == "image")
 
-        # Kemas kini medan logo
-        has_logo = tmpl.logo is not None and bool(tmpl.logo.asset_filename)
-        actual_logo = tmpl.logo.asset_filename if has_logo else ""
+        logo = tmpl.logo
+        actual_logo = logo.asset_filename if (logo is not None and logo.asset_filename) else ""
+        has_logo = bool(actual_logo)
 
         self.logo_checkbox.value = has_logo
         self.logo_checkbox.update()

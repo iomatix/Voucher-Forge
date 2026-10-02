@@ -6,6 +6,7 @@ Strict zero-UI layer handling directory scaffolding and atomic persistence.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import uuid
 from datetime import UTC, datetime
@@ -15,9 +16,12 @@ from typing import Any
 from voucher_forge.models import (
     BundleRegistry,
     CampaignPreset,
+    SchemaVersionMismatchError,
     TemplateConfig,
     VoucherStatus,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class TemplateNotFoundError(FileNotFoundError):
@@ -83,7 +87,7 @@ class StorageRepository:
                     pass
             raise
 
-    # --- Szablony (Templates) ---
+    # --- Templates ---
     def save_template(self, template: TemplateConfig) -> Path:
         target_path = self.templates_dir / f"{template.id}.json"
         self._write_atomic_json(target_path, template.to_dict())
@@ -109,7 +113,7 @@ class StorageRepository:
             results.append(TemplateConfig.from_dict(data))
         return results
 
-    # --- Presety Kampanii (Campaign Presets) ---
+    # --- Campaign Presets ---
     def save_preset(self, preset: CampaignPreset) -> Path:
         target_path = self.presets_dir / f"{preset.id}.json"
         self._write_atomic_json(target_path, preset.to_dict())
@@ -137,11 +141,12 @@ class StorageRepository:
                 with open(file_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
                 results.append(CampaignPreset.from_dict(data))
-            except Exception:
+            except (json.JSONDecodeError, KeyError, ValueError, SchemaVersionMismatchError) as exc:
+                logger.warning("Skipping invalid preset file '%s': %s", file_path.name, exc)
                 continue
         return results
 
-    # --- Paczki (Bundles) ---
+    # --- Bundles ---
     def save_bundle(self, bundle: BundleRegistry) -> Path:
         target_path = self.bundles_dir / f"{bundle.id}.json"
         self._write_atomic_json(target_path, bundle.to_dict())

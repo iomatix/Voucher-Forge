@@ -11,9 +11,14 @@ from typing import Any
 from nicegui import run, ui
 
 from voucher_forge.code_engine import CodeEngine
-from voucher_forge.models import CampaignPreset, VariantPreset
+from voucher_forge.models import (
+    CampaignPreset,
+    SchemaVersionMismatchError,
+    VariantPreset,
+)
 from voucher_forge.packer import pack_vouchers
 from voucher_forge.renderer import render_bundle_html, render_voucher_svg
+from voucher_forge.storage import PresetNotFoundError, TemplateNotFoundError
 from voucher_forge.ui.state import AppState
 
 
@@ -180,7 +185,10 @@ class BatchForgeView:
         self._update_summary()
 
     def _render_variant_svg(self, row: VariantRow) -> str:
-        template = self.state.storage.load_template(self.template_select.value)
+        tmpl_id = str(self.template_select.value or "")
+        if not tmpl_id:
+            return ""
+        template = self.state.storage.load_template(tmpl_id)
         overrides = {}
         if len(template.text_blocks) > 0:
             overrides[template.text_blocks[0].id] = row.title
@@ -230,7 +238,7 @@ class BatchForgeView:
                                 value=row.title,
                                 label=self.state.t("variant_title"),
                                 on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                    r, i, "title", e.value
+                                    r, i, "title", str(e.value or "")
                                 ),
                             ).classes("flex-1 font-semibold")
 
@@ -255,7 +263,7 @@ class BatchForgeView:
                             value=row.sub_text,
                             label=self.state.t("sub_text"),
                             on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                r, i, "sub_text", e.value
+                                r, i, "sub_text", str(e.value or "")
                             ),
                         ).classes("w-full text-sm")
 
@@ -265,7 +273,7 @@ class BatchForgeView:
                                 value=row.bg_asset or "",
                                 label=self.state.t("variant_bg_asset"),
                                 on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                    r, i, "bg_asset", e.value
+                                    r, i, "bg_asset", str(e.value or "")
                                 ),
                             ).classes("flex-1 text-xs")
 
@@ -274,7 +282,7 @@ class BatchForgeView:
                                 value=row.logo_asset or "",
                                 label=self.state.t("variant_logo_asset"),
                                 on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                    r, i, "logo_asset", e.value
+                                    r, i, "logo_asset", str(e.value or "")
                                 ),
                             ).classes("flex-1 text-xs")
 
@@ -284,7 +292,7 @@ class BatchForgeView:
                                     value=row.bg_color or "",
                                     placeholder=self.state.t("variant_color_default"),
                                     on_change=lambda e, r=row, i=idx: self._update_row_field(
-                                        r, i, "bg_color", e.value or None
+                                        r, i, "bg_color", str(e.value or "") or None
                                     ),
                                 ).classes("flex-1 text-xs")
                                 ui.color_picker(
@@ -354,7 +362,7 @@ class BatchForgeView:
                 self.state.t("preset_loaded").format(name=preset.name),
                 type="positive",
             )
-        except Exception as exc:
+        except (PresetNotFoundError, SchemaVersionMismatchError, KeyError, ValueError) as exc:
             ui.notify(f"Error loading preset: {exc}", type="negative")
 
     def _save_current_preset(self) -> None:
@@ -363,10 +371,15 @@ class BatchForgeView:
             ui.notify(self.state.t("preset_enter_id"), type="warning")
             return
 
+        tmpl_id = str(self.template_select.value or "").strip()
+        if not tmpl_id:
+            ui.notify("Template must be selected.", type="warning")
+            return
+
         preset = CampaignPreset(
             id=pid,
             name=str(self.b_name.value or "").strip() or pid,
-            template_id=str(self.template_select.value),
+            template_id=tmpl_id,
             prefix=str(self.b_prefix.value or "OFF").strip(),
             validity_months=int(self.b_validity.value or 12),
             variants=[
@@ -407,7 +420,13 @@ class BatchForgeView:
 
     def _update_summary(self) -> None:
         total = sum(r.count for r in self.variants)
-        template = self.state.storage.load_template(self.template_select.value)
+        tmpl_id = str(self.template_select.value or "")
+        if not tmpl_id:
+            return
+        try:
+            template = self.state.storage.load_template(tmpl_id)
+        except TemplateNotFoundError:
+            return
 
         scale = getattr(self, "print_scale_val", 1.0)
         scaled_w = template.width_mm * scale
@@ -457,7 +476,20 @@ class BatchForgeView:
 
     async def _handle_generation(self) -> None:
         try:
-            template = self.state.storage.load_template(self.template_select.value)
+            bundle_id = str(self.b_id.value or "").strip()
+            bundle_name = str(self.b_name.value or "").strip()
+            tmpl_id = str(self.template_select.value or "").strip()
+            prefix = str(self.b_prefix.value or "").strip()
+
+            if not bundle_id or not bundle_name:
+                ui.notify("Bundle ID and Bundle Name are required.", type="warning")
+                return
+
+            if not tmpl_id:
+                ui.notify("Please select a template.", type="warning")
+                return
+
+            template = self.state.storage.load_template(tmpl_id)
             t_id1 = template.text_blocks[0].id if len(template.text_blocks) > 0 else "tb1"
             t_id2 = template.text_blocks[1].id if len(template.text_blocks) > 1 else "tb2"
 
@@ -475,12 +507,13 @@ class BatchForgeView:
                 for r in self.variants
                 if r.title.strip()
             ]
+
             bundle = CodeEngine.generate_campaign_bundle(
-                bundle_id=self.b_id.value,
-                bundle_name=self.b_name.value,
-                template_id=self.template_select.value,
+                bundle_id=bundle_id,
+                bundle_name=bundle_name,
+                template_id=tmpl_id,
                 variants=variant_tuples,
-                prefix=self.b_prefix.value,
+                prefix=prefix,
                 validity_months=int(self.b_validity.value or 99),
             )
             self.state.storage.save_bundle(bundle)
@@ -518,5 +551,5 @@ class BatchForgeView:
             ui.download(export_url)
             ui.navigate.to(export_url, new_tab=True)
 
-        except (ValueError, OSError, RuntimeError) as exc:
+        except (ValueError, OSError, RuntimeError, TemplateNotFoundError) as exc:
             ui.notify(f"Generation Error: {exc}", type="negative")

@@ -114,8 +114,17 @@ if ($NeedsInstall) {
     Write-Host "-> Environment synchronized successfully." -ForegroundColor Green
 }
 
+$VenvRuff = Join-Path $VenvDir "Scripts\ruff.exe"
+
 # 5. Execution mode: Test Suite vs Web App
 if ($Test) {
+    Write-Host "-> Running Ruff linter..." -ForegroundColor Cyan
+    & $VenvRuff check --fix .
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Linter failed. Fix the issues before running tests."
+        exit $LASTEXITCODE
+    }
+
     Write-Host "-> Running test suite via pytest..." -ForegroundColor Cyan
     & $VenvPytest -v
     exit $LASTEXITCODE
