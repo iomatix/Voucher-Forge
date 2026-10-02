@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "voucher-forge"
 version = "0.1.0"
@@ -13,6 +17,10 @@ dependencies = [
 dev = [
     "pytest>=8.0.0",
 ]
+
+[tool.setuptools.packages.find]
+include = ["voucher_forge*"]
+exclude = ["data*", "tests*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
