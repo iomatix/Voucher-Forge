@@ -80,25 +80,16 @@ def _generate_guillotine_cut_marks(
 
     # 1. Vertical guide ticks on top and bottom margins
     for x in sorted(x_coords):
-        # Top page margin tick
         marks.append(CutMark(x1_mm=x, y1_mm=max(0.0, min_y - mark_len), x2_mm=x, y2_mm=min_y))
-        # Bottom page margin tick
         marks.append(CutMark(x1_mm=x, y1_mm=max_y, x2_mm=x, y2_mm=min(page_h, max_y + mark_len)))
 
     # 2. Horizontal guide ticks on left and right margins
     for y in sorted(y_coords):
-        # Left page margin tick
         marks.append(CutMark(x1_mm=max(0.0, min_x - mark_len), y1_mm=y, x2_mm=min_x, y2_mm=y))
-        # Right page margin tick
         marks.append(CutMark(x1_mm=max_x, y1_mm=y, x2_mm=min(page_w, max_x + mark_len), y2_mm=y))
 
-    # 3. Gutter connector marks between vouchers
-    sorted_x = sorted(x_coords)
-    sorted_y = sorted(y_coords)
-
-    # Vertical lines through horizontal gutters between items
+    # 3. Corner micro-ticks for precise scissors cutting
     for item in items:
-        # Corner micro-ticks for precise scissors cutting
         x, y, w, h = item.x_mm, item.y_mm, item.width_mm, item.height_mm
         marks.append(CutMark(x1_mm=x - 1.5, y1_mm=y, x2_mm=x, y2_mm=y))
         marks.append(CutMark(x1_mm=x, y1_mm=y - 1.5, x2_mm=x, y2_mm=y))
@@ -158,6 +149,10 @@ def pack_vouchers(
     if scale_factor <= 0.0:
         raise ValueError("scale_factor must be greater than 0.0")
 
+    for item_id, w, h in items:
+        if w <= 0.0 or h <= 0.0:
+            raise ValueError(f"Item '{item_id}' dimensions must be greater than 0.0")
+
     printable_w = round(A4_WIDTH_MM - 2 * margin_mm, 4)
     printable_h = round(A4_HEIGHT_MM - 2 * margin_mm, 4)
 
@@ -188,6 +183,11 @@ def pack_vouchers(
         (item_id, round(w * effective_scale, 3), round(h * effective_scale, 3))
         for item_id, w, h in items
     ]
+
+    # Validate that individual scaled items fit within printable area
+    for item_id, w, h in scaled_items:
+        if w > printable_w or h > printable_h:
+            raise ValueError(f"Item '{item_id}' exceeds printable area of the sheet.")
 
     pages: list[PackedPage] = []
     current_page = PackedPage(page_index=0)

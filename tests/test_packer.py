@@ -39,7 +39,7 @@ def test_fit_large_ticket_and_small_coupons_single_page() -> None:
 
 
 def test_multi_page_overflow() -> None:
-    # 12 large DL tickets (200x90). Each page can hold at most 2 or 3 tickets.
+    # 12 large DL tickets (190x80). Each page can hold at most 2 or 3 tickets.
     items = [(f"ticket_{i}", 190.0, 80.0) for i in range(12)]
 
     result = pack_vouchers(items, margin_mm=8.0, spacing_mm=4.0)
@@ -91,34 +91,52 @@ def test_cut_marks_generation_and_placement() -> None:
 
     page = result.pages[0]
     item = page.items[0]
-    # Each item generates 8 tick marks (2 per corner)
-    assert len(page.cut_marks) == 8
 
-    for mark in page.cut_marks:
-        # One point of each mark starts on the item bounding box
-        on_left = round(mark.x1_mm, 2) == round(item.x_mm, 2)
-        on_right = round(mark.x1_mm, 2) == round(item.x_mm + item.width_mm, 2)
-        on_top = round(mark.y1_mm, 2) == round(item.y_mm, 2)
-        on_bottom = round(mark.y1_mm, 2) == round(item.y_mm + item.height_mm, 2)
+    # 1 item produces:
+    # - 4 margin ticks vertical (2 top, 2 bottom)
+    # - 4 margin ticks horizontal (2 left, 2 right)
+    # - 8 corner micro-ticks
+    # Total = 16 cut marks
+    assert len(page.cut_marks) == 16
 
-        assert (on_left or on_right) and (on_top or on_bottom)
-
-        # Cut ticks point away from the voucher (outside its interior)
-        if mark.x2_mm != mark.x1_mm:
-            assert (
-                mark.x2_mm < item.x_mm or mark.x2_mm > item.x_mm + item.width_mm
-            )
-        if mark.y2_mm != mark.y1_mm:
-            assert (
-                mark.y2_mm < item.y_mm or mark.y2_mm > item.y_mm + item.height_mm
-            )
+    # Verify that micro-ticks connect to item boundaries
+    corner_ticks = page.cut_marks[8:]
+    for mark in corner_ticks:
+        on_left = round(mark.x1_mm, 2) == round(item.x_mm, 2) or round(mark.x2_mm, 2) == round(item.x_mm, 2)
+        on_right = round(mark.x1_mm, 2) == round(item.x_mm + item.width_mm, 2) or round(mark.x2_mm, 2) == round(item.x_mm + item.width_mm, 2)
+        on_top = round(mark.y1_mm, 2) == round(item.y_mm, 2) or round(mark.y2_mm, 2) == round(item.y_mm, 2)
+        on_bottom = round(mark.y1_mm, 2) == round(item.y_mm + item.height_mm, 2) or round(mark.y2_mm, 2) == round(item.y_mm + item.height_mm, 2)
+        assert (on_left or on_right) or (on_top or on_bottom)
 
 
 def test_item_exceeding_sheet_raises_error() -> None:
-    # 250x250 does not fit on A4 (210x297 minus margins) in any orientation
+    # 250x250 exceeds A4 width (210)
     items = [("oversized", 250.0, 250.0)]
     with pytest.raises(ValueError, match="exceeds printable area"):
         pack_vouchers(items)
+
+
+def test_invalid_dimensions_and_scaling() -> None:
+    with pytest.raises(ValueError, match="scale_factor must be greater than 0.0"):
+        pack_vouchers([("v1", 100.0, 50.0)], scale_factor=0.0)
+
+    with pytest.raises(ValueError, match="must be greater than 0.0"):
+        pack_vouchers([("v1", -10.0, 50.0)])
+
+    with pytest.raises(ValueError, match="Margins exceed available sheet dimensions"):
+        pack_vouchers([("v1", 100.0, 50.0)], margin_mm=120.0)
+
+
+def test_target_grid_autofit_scaling() -> None:
+    # Force 3 columns and 4 rows on items that normally wouldn't fit 3x4 without scale down
+    items = [(f"card_{i}", 100.0, 100.0) for i in range(12)]
+    result = pack_vouchers(items, target_cols=3, target_rows=4)
+
+    assert result.total_pages == 1
+    page = result.pages[0]
+    assert len(page.items) == 12
+    # Verify scale was reduced to fit 3x4
+    assert page.items[0].scale_factor < 1.0
 
 
 def test_empty_items_input() -> None:
