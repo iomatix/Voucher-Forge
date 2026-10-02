@@ -8,8 +8,30 @@ from voucher_forge.code_engine import (
     ALPHABET,
     CodeEngine,
     InvalidCodeFormatError,
+    _base31_to_int,
+    _int_to_base31,
+    compute_luhn_mod31_check_digit,
+    verify_luhn_mod31,
 )
 from voucher_forge.models import VoucherStatus
+
+
+def test_base31_conversion_roundtrip() -> None:
+    for val in [0, 1, 30, 31, 500, 29790]:
+        encoded = _int_to_base31(val, length=3)
+        assert len(encoded) == 3
+        decoded = _base31_to_int(encoded)
+        assert decoded == val
+
+
+def test_int_to_base31_overflow() -> None:
+    with pytest.raises(ValueError, match="exceeds allocated length"):
+        _int_to_base31(31**3 + 1, length=3)
+
+
+def test_base31_to_int_invalid_char() -> None:
+    with pytest.raises(InvalidCodeFormatError, match="not in valid alphabet"):
+        _base31_to_int("0AB")
 
 
 def test_generate_and_validate_key() -> None:
@@ -24,6 +46,27 @@ def test_generate_and_validate_key() -> None:
     assert parts[2] == "12"
     assert len(parts[3]) == 2
     assert CodeEngine.validate_key(key) is True
+
+
+def test_generate_key_with_explicit_entropy_char() -> None:
+    key = CodeEngine.generate_key(
+        prefix="ABC",
+        validity_months=6,
+        target_date=date(2026, 1, 1),
+        entropy_char="K",
+    )
+    assert key.startswith("ABC-222-06-K")
+    assert CodeEngine.validate_key(key) is True
+
+
+def test_generate_key_with_invalid_entropy_char() -> None:
+    with pytest.raises(InvalidCodeFormatError, match="Invalid entropy char"):
+        CodeEngine.generate_key(prefix="ABC", entropy_char="0")
+
+
+def test_generate_key_earlier_than_epoch_raises_error() -> None:
+    with pytest.raises(InvalidCodeFormatError, match="earlier than epoch"):
+        CodeEngine.generate_key(prefix="ABC", target_date=date(2025, 12, 31))
 
 
 def test_single_typo_detection() -> None:
@@ -78,6 +121,19 @@ def test_adjacent_transposition_detection() -> None:
         assert CodeEngine.validate_key(swapped_key) is False, f"Failed at swap {idx}<->{idx+1}"
 
 
+def test_validate_key_structural_malformations() -> None:
+    assert CodeEngine.validate_key("") is False
+    assert CodeEngine.validate_key("ABC-222-12") is False
+    assert CodeEngine.validate_key("A-222-12-AB") is False  # Prefix too short (< 2)
+    assert CodeEngine.validate_key("TOOLONG-222-12-AB") is False  # Prefix too long (> 4)
+    assert CodeEngine.validate_key("ABC-22-12-AB") is False  # ts_part len != 3
+    assert CodeEngine.validate_key("ABC-222-1-AB") is False  # val_part len != 2
+    assert CodeEngine.validate_key("ABC-222-12-A") is False  # tail len != 2
+    assert CodeEngine.validate_key("ABC-222-XX-AB") is False  # val_part not numeric
+    assert CodeEngine.validate_key("ABC-222-00-AB") is False  # val_part < 1
+    assert CodeEngine.validate_key("ABC-222-12-A0") is False  # tail contains forbidden '0'
+
+
 def test_decode_key_attributes() -> None:
     test_date = date(2026, 8, 20)
     key = CodeEngine.generate_key(
@@ -96,6 +152,16 @@ def test_decode_invalid_key() -> None:
     assert decoded["is_valid"] is False
     assert decoded["creation_date"] is None
     assert decoded["validity_months"] is None
+
+
+def test_decode_tampered_key_returns_invalid() -> None:
+    key = CodeEngine.generate_key(
+        prefix="GND", validity_months=24, target_date=date(2026, 8, 20)
+    )
+    tampered = key[:-1] + ("2" if key[-1] != "2" else "3")
+    decoded = CodeEngine.decode_key(tampered)
+    assert decoded["is_valid"] is False
+    assert decoded["creation_date"] is None
 
 
 def test_prefix_boundary_and_validation() -> None:
@@ -118,6 +184,16 @@ def test_validity_bounds() -> None:
 
     with pytest.raises(InvalidCodeFormatError):
         CodeEngine.generate_key(prefix="ABC", validity_months=100)
+
+
+def test_compute_luhn_mod31_invalid_char() -> None:
+    with pytest.raises(InvalidCodeFormatError, match="Invalid character"):
+        compute_luhn_mod31_check_digit("ABC#DEF")
+
+
+def test_verify_luhn_mod31_empty_and_invalid_char() -> None:
+    assert verify_luhn_mod31("") is False
+    assert verify_luhn_mod31("ABC?12") is False
 
 
 def test_bundle_allocation_uniqueness() -> None:
@@ -144,7 +220,16 @@ def test_bundle_allocation_uniqueness() -> None:
         assert CodeEngine.validate_key(v.code) is True
 
 
-def test_bundle_allocation_exceeds_entropy_limit() -> None:
+def test_bundle_allocation_bounds() -> None:
+    with pytest.raises(ValueError, match="must be at least 1"):
+        CodeEngine.generate_bundle(
+            bundle_id="b_zero",
+            bundle_name="Zero Test",
+            template_id="tmpl_main",
+            count=0,
+            prefix="KPN",
+        )
+
     with pytest.raises(ValueError, match="Max amount of vouchers per bundle is 31"):
         CodeEngine.generate_bundle(
             bundle_id="b_test_overflow",
@@ -152,15 +237,15 @@ def test_bundle_allocation_exceeds_entropy_limit() -> None:
             template_id="tmpl_main",
             count=32,
             prefix="KPN",
-            validity_months=12,
-            target_date=date(2026, 5, 1),
         )
 
+
 def test_campaign_bundle_generation() -> None:
+    # Testing with custom text box target IDs: "tb_title" and "tb_sub"
     variants = [
-        ("DINNER FOR TWO", "Includes starter & main", 3),
-        ("MASSAGE SESSION", "60 minutes relax", 2),
-        ("SPA PASS", "Full day access", 1),
+        ("DINNER FOR TWO", "Includes starter & main", 3, None, None, None, "tb_title", "tb_sub"),
+        ("MASSAGE SESSION", "60 minutes relax", 2, None, None, None, "tb_title", "tb_sub"),
+        ("SPA PASS", "Full day access", 1, "bg.png", "logo.png", "#112233", "tb_title", "tb_sub"),
     ]
     bundle = CodeEngine.generate_campaign_bundle(
         bundle_id="b_campaign_test",
@@ -193,14 +278,28 @@ def test_campaign_bundle_generation() -> None:
         "Full day access",
     ]
 
+    last_voucher = bundle.vouchers[-1]
+    assert last_voucher.bg_asset_override == "bg.png"
+    assert last_voucher.logo_asset_override == "logo.png"
+    assert last_voucher.bg_color_override == "#112233"
 
-def test_campaign_bundle_overflow_raises_error() -> None:
-    variants = [("ITEM A", "Desc A", 20), ("ITEM B", "Desc B", 12)]
+
+def test_campaign_bundle_bounds_errors() -> None:
+    with pytest.raises(ValueError, match="must be at least 1"):
+        CodeEngine.generate_campaign_bundle(
+            bundle_id="b_empty",
+            bundle_name="Empty",
+            template_id="tmpl_main",
+            variants=[],
+            prefix="CMP",
+        )
+
+    variants_overflow = [("ITEM A", "Desc A", 20), ("ITEM B", "Desc B", 12)]
     with pytest.raises(ValueError, match="Max amount of vouchers per bundle is 31"):
         CodeEngine.generate_campaign_bundle(
             bundle_id="b_overflow",
             bundle_name="Overflow",
             template_id="tmpl_main",
-            variants=variants,
+            variants=variants_overflow,
             prefix="CMP",
         )

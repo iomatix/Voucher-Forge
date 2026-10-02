@@ -1,4 +1,4 @@
-"""Deterministic CD-Key generation, verification, and decoding engine.
+"""Deterministic Key generation, verification, and decoding engine.
 
 Uses custom 31-character unambiguous base alphabet and Luhn mod 31 algorithm.
 Zero-UI coupling: standard Python library only.
@@ -141,7 +141,7 @@ class CodeEngine:
         payload = f"{clean_prefix}{ts_part}{val_part}{ent_char}"
         check_char = compute_luhn_mod31_check_digit(payload)
 
-        return f"{clean_prefix}-{ts_part}-{val_part}-{ent_ch}{check_char}"
+        return f"{clean_prefix}-{ts_part}-{val_part}-{ent_char}{check_char}"
 
     @classmethod
     def validate_key(cls, key: str) -> bool:
