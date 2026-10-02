@@ -99,7 +99,17 @@ if (Test-Path $StampFile) {
 if ($NeedsInstall) {
     Write-Host "-> Installing / updating project dependencies from pyproject.toml..." -ForegroundColor Yellow
     & $VenvPython -m pip install --upgrade pip
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "ERROR: Failed to upgrade pip."
+        exit $LASTEXITCODE
+    }
+
     & $VenvPython -m pip install -e ".[dev]"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "ERROR: Failed to install project dependencies via pip."
+        exit $LASTEXITCODE
+    }
+
     Set-Content -Path $StampFile -Value (Get-Date).ToString("o")
     Write-Host "-> Environment synchronized successfully." -ForegroundColor Green
 }
